@@ -1,11 +1,13 @@
-from typing import List, Set, Iterable
 import logging
+from datetime import date
+from typing import Iterable, List, Set
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 BASE_S3_URL = "https://d37ci68n02y6s.cloudfront.net/trip-data/"
 VALID_DATASETS = {"yellow", "green", "fhv", "hvfhv"}
+
 
 def _check_dataset(d):
     """Validates a single dataset item."""
@@ -15,11 +17,13 @@ def _check_dataset(d):
         raise ValueError(f"Invalid dataset '{d}'. Must be one of {VALID_DATASETS}")
     return d
 
+
 def _check_year(y):
     """Validates a single year item. Explicitly rejects booleans."""
     if not isinstance(y, int) or isinstance(y, bool):
         raise TypeError(f"Year must be an integer, got {type(y).__name__}")
     return y
+
 
 def _check_month(m):
     """Validates a single month item. Explicitly rejects booleans."""
@@ -29,11 +33,13 @@ def _check_month(m):
         raise ValueError(f"Month {m} is out of valid range (1-12)")
     return m
 
+
 def _validate_datasets(datasets: Iterable[str]) -> List[str]:
     if not isinstance(datasets, Iterable):
         raise TypeError("datasets must be iterable.")
     # Use set to avoid duplicates and sort for deterministic order
     return sorted(list({_check_dataset(d) for d in datasets}))
+
 
 def _validate_years(years: Iterable[int]) -> List[int]:
     if not isinstance(years, Iterable):
@@ -41,21 +47,23 @@ def _validate_years(years: Iterable[int]) -> List[int]:
     # Use set to avoid duplicates and sort for chronological order
     return sorted(list({_check_year(y) for y in years}))
 
+
 def _validate_months(months: Iterable[int]) -> List[int]:
     if not isinstance(months, Iterable):
         raise TypeError("months must be iterable.")
     # Use set to avoid duplicates and sort for chronological order
     return sorted(list({_check_month(m) for m in months}))
 
+
 def generate_parquet_urls(
-    datasets: Iterable[str] = None, 
-    years: Iterable[int] = range(2015, 2025), 
-    months: Iterable[int] = range(1, 13)
+    datasets: Iterable[str] = None,
+    years: Iterable[int] = range(2015, date.today().year),
+    months: Iterable[int] = range(1, 13),
 ) -> List[str]:
     """
     Generates a list of Parquet URLs based on the known NYC TLC pattern,
     ordered chronologically.
-    
+
     Args:
         datasets: Iterable of dataset names. If None, uses all 4 valid types.
         years: Iterable of years.
@@ -77,6 +85,6 @@ def generate_parquet_urls(
         for month in v_months
         for dataset in v_datasets
     ]
-                
+
     logger.info(f"Generated {len(urls)} potential URLs in chronological order.")
     return urls
