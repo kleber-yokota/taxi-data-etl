@@ -1,51 +1,38 @@
-import httpx
-from bs4 import BeautifulSoup
-from typing import Set
+from typing import Set, List
 import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class TLCParser:
+# The observed pattern for NYC TLC Parquet files
+BASE_S3_URL = "https://d37ci68n02y6s.cloudfront.net/trip-data/"
+
+def generate_parquet_urls(
+    datasets: List[str] = ["yellow", "green", "manhattan"], 
+    years: List[int] = range(2015, 2025), 
+    months: List[int] = range(1, 13)
+) -> Set[str]:
     """
-    Responsible for parsing the NYC TLC website to discover available 
-    trip record data in Parquet format.
-    """
+    Generates a set of potential Parquet URLs based on the known NYC TLC pattern.
     
-    def __init__(self, base_url: str):
-        """
-        Initialize the parser.
+    Pattern: {BASE_S3_URL}{dataset}_tripdata_{year}-{month}.parquet
 
-        Args:
-            base_url (str): The URL of the NYC TLC trip record data page.
-        """
-        self.base_url = base_url
-        self.client = httpx.Client(follow_redirects=True, timeout=30.0)
+    Args:
+        datasets (List[str]): List of dataset types (e.g., 'yellow', 'green').
+        years (List[int]): Range or list of years to generate.
+        months (List[int]): Range or list of months to generate.
 
-    def fetch_parquet_urls(self) -> Set[str]:
-        """
-        Scrapes the NYC TLC page to find all links ending in .parquet.
-
-        Returns:
-            Set[str]: A set of absolute URLs to Parquet files.
-        """
-        logger.info(f"Fetching Parquet URLs from: {self.base_url}")
-        try:
-            response = self.client.get(self.base_url)
-            response.raise_for_status()
-        except httpx.HTTPError as e:
-            logger.error(f"Error fetching URLs from {self.base_url}: {e}")
-            raise
-
-        soup = BeautifulSoup(response.text, "html.parser")
-        links = set()
-        
-        for a in soup.find_all("a", href=True):
-            url = a["href"]
-            if url.endswith(".parquet"):
-                if url.startswith("/"):
-                    url = f"https://www.nyc.gov{url}"
-                links.add(url)
+    Returns:
+        Set[str]: A set of generated absolute URLs.
+    """
+    urls = set()
+    
+    for dataset in datasets:
+        for year in years:
+            for month in months:
+                # Format month to always be two digits (e.g., 01, 02)
+                url = f"{BASE_S3_URL}{dataset}_tripdata_{year}-{month:02d}.parquet"
+                urls.add(url)
                 
-        logger.info(f"Found {len(links)} Parquet files.")
-        return links
+    logger.info(f"Generated {len(urls)} potential URLs based on the S3 pattern.")
+    return urls
