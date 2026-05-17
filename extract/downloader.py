@@ -1,48 +1,31 @@
 import os
 import httpx
 from pathlib import Path
-from typing import List, Set
+from typing import List, Iterable
 import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class TLCDownloader:
+def download_file(url: str, download_dir: Path) -> Path:
     """
-    Responsible for downloading Parquet files idempotently.
+    Downloads a Parquet file idempotently.
+    If the file exists locally and the size matches the remote Content-Length,
+    the download is skipped.
+
+    Args:
+        url (str): The absolute URL of the file to download.
+        download_dir (Path): The local directory where the file will be stored.
+
+    Returns:
+        Path: The path to the downloaded file.
     """
+    filename = url.split("/")[-1]
+    target_path = download_dir / filename
     
-    def __init__(self, download_dir: str = "data/raw"):
-        """
-        Initialize the downloader.
-
-        Args:
-            download_dir (str): The local directory where files will be stored.
-        """
-        self.download_dir = Path(download_dir)
-        self.download_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Use a synchronous httpx client. 
-        # Timeout is set to None for the main client to avoid timeouts on large files.
-        self.client = httpx.Client(follow_redirects=True, timeout=None)
-
-    def download_file(self, url: str) -> Path:
-        """
-        Downloads a Parquet file idempotently.
-        If the file exists locally and the size matches the remote Content-Length,
-        the download is skipped.
-
-        Args:
-            url (str): The absolute URL of the file to download.
-
-        Returns:
-            Path: The path to the downloaded file.
-        """
-        filename = url.split("/")[-1]
-        target_path = self.download_dir / filename
-        
+    with httpx.Client(follow_redirects=True, timeout=None) as client:
         try:
-            head_response = self.client.head(url)
+            head_response = client.head(url)
             head_response.raise_for_status()
             remote_size = int(head_response.headers.get("Content-Length", 0))
         except (httpx.HTTPError, ValueError) as e:
@@ -58,31 +41,34 @@ class TLCDownloader:
                 logger.warning(f"File {filename} exists but size differs. Re-downloading...")
 
         logger.info(f"Downloading {filename} (Approx. {remote_size / 1024 / 1024:.2f} MB)...")
-        with self.client.stream("GET", url) as response:
+        with client.stream("GET", url) as response:
             response.raise_for_status()
             with open(target_path, "wb") as f:
                 for chunk in response.iter_bytes():
                     f.write(chunk)
-        
-        return target_path
+    
+    return target_path
 
-    def run(self, urls: Set[str]) -> List[Path]:
-        """
-        Downloads all provided URLs.
+def download_all(urls: Iterable[str], download_dir: str = "data/raw") -> List[Path]:
+    """
+    Downloads all provided URLs to the specified directory.
 
-        Args:
-            urls (Set[str]): A set of absolute URLs to download.
+    Args:
+        urls (Iterable[str]): An iterable of absolute URLs to download.
+        download_dir (str): The local directory where files will be stored.
 
-        Returns:
-            List[Path]: A list of paths to the downloaded files.
-        """
-        downloaded_files = []
-        
-        for url in urls:
-            try:
-                path = self.download_file(url)
-                downloaded_files.append(path)
-            except Exception as e:
-                logger.error(f"Failed to download {url}: {e}")
-                
-        return downloaded_files
+    Returns:
+        List[Path]: A list of paths to the successfully downloaded files.
+    """
+    download_path = Path(download_dir)
+    download_path.mkdir(parents=True, exist_ok=True)
+    
+    downloaded_files = []
+    for url in urls:
+        try:
+            path = download_file(url, download_path)
+            downloaded_files.append(path)
+        except Exception as e:
+            logger.error(f"Failed to download {url}: {e}")
+            
+    return downloaded_files
