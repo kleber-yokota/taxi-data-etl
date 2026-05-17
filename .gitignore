@@ -3,3 +3,4 @@ crash-*
 .venv
 .pytest_cache
 .hypothesis
+mutants
