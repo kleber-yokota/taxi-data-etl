@@ -1,4 +1,4 @@
-[project]
+[       project]
 name = "taxi-data-etl"
 version = "0.1.0"
 description = "Modular ELT pipeline for NYC Taxi data"
@@ -29,3 +29,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["extract"]
+
+[tool.mutmut]
+paths_to_mutate = ["extract"]
+pytest_add_cli_args_test_selection = ["tests/unit"]
