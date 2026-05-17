@@ -1,0 +1,252 @@
+name: CI
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync
+
+      - name: Get changed source files
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "Push to main — running full test suite"
+            echo "files=FULL" >> $GITHUB_OUTPUT
+          else
+            git fetch origin main
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              BASE="origin/${{ github.base_ref }}"
+            else
+              BASE="origin/main"
+            fi
+            FILES=$(git diff --name-only "$BASE"..HEAD \
+              | grep -E '^(extract|upload|etl)/.*\.py$' \
+              | grep -v '/tests/' \
+              | tr '\n' ' ')
+            if [ -z "$FILES" ]; then
+              echo "No Python source files changed — skipping"
+            else
+              echo "Changed: $FILES"
+            fi
+            echo "files=$FILES" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run unit tests
+        if: steps.changed.outputs.files != '' && steps.changed.outputs.files != 'FULL'
+        run: |
+          echo "Running tests for affected modules..."
+          MODULES=$(echo "${{ steps.changed.outputs.files }}" | tr ' ' '\n' | cut -d/ -f1 | sort -u | tr '\n' ' ')
+          TEST_DIRS=""
+          for mod in $MODULES; do
+            if [ -d "${mod}/tests" ]; then
+              TEST_DIRS+=" ${mod}/tests/"
+            fi
+          done
+          if [ -n "$TEST_DIRS" ]; then
+            uv run pytest -v $TEST_DIRS
+          fi
+
+      - name: Run full unit tests (main push)
+        if: steps.changed.outputs.files == 'FULL'
+        run: uv run pytest -v etl/tests/ extract/tests/ upload/tests/
+
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync
+
+      - name: Get changed source files
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "files=FULL" >> $GITHUB_OUTPUT
+          else
+            git fetch origin main
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              BASE="origin/${{ github.base_ref }}"
+            else
+              BASE="origin/main"
+            fi
+            FILES=$(git diff --name-only "$BASE"..HEAD \
+              | grep -E '^(extract|upload|etl)/.*\.py$' \
+              | grep -v '/tests/' \
+              | tr '\n' ' ')
+            echo "files=$FILES" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run fuzz tests (incremental)
+        if: steps.changed.outputs.files != '' && steps.changed.outputs.files != 'FULL'
+        run: |
+          MODULES=$(echo "${{ steps.changed.outputs.files }}" | tr ' ' '\n' | cut -d/ -f1 | sort -u | tr '\n' ' ')
+          for mod in $MODULES; do
+            # Check both flat and nested locations for fuzz tests
+            if [ -f "${mod}/tests/test_fuzz.py" ]; then
+              echo "Running fuzz tests for ${mod}..."
+              uv run python "${mod}/tests/test_fuzz.py" -runs=10000
+            fi
+            if [ -d "${mod}/tests" ]; then
+              FOUND=$(find "${mod}/tests" -name "test_fuzz.py" -type f)
+              for f in $FOUND; do
+                if [ "$f" != "${mod}/tests/test_fuzz.py" ]; then
+                  echo "Running fuzz tests for ${f}..."
+                  uv run python "$f" -runs=10000
+                fi
+              done
+            fi
+          done
+
+      - name: Run full fuzz tests (main push)
+        if: steps.changed.outputs.files == 'FULL'
+        run: |
+          uv run python etl/tests/test_fuzz.py -runs=10000
+          uv run python upload/tests/test_fuzz.py -runs=10000
+          uv run python extract/tests/downloaders/test_fuzz.py -runs=10000
+
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync
+
+      - name: Get changed source files
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "Push to main — running full mutation suite"
+            echo "files=FULL" >> $GITHUB_OUTPUT
+          else
+            git fetch origin main
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              BASE="origin/${{ github.base_ref }}"
+            else
+              BASE="origin/main"
+            fi
+            FILES=$(git diff --name-only "$BASE"..HEAD \
+              | grep -E '^(extract|upload|etl)/.*\.py$' \
+              | grep -v '/tests/' \
+              | tr '\n' ' ')
+            if [ -z "$FILES" ]; then
+              echo "No Python source files changed — skipping mutation"
+            else
+              echo "Mutating: $FILES"
+            fi
+            echo "files=$FILES" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run mutation CI (incremental)
+        if: steps.changed.outputs.files != '' && steps.changed.outputs.files != 'FULL'
+        run: uv run bash scripts/run_mutation_ci.sh 85 ${{ steps.changed.outputs.files }}
+
+      - name: Run mutation CI (full)
+        if: steps.changed.outputs.files == 'FULL'
+        run: uv run bash scripts/run_mutation_ci.sh 85
+
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync
+
+      - name: Get changed source files
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "files=FULL" >> $GITHUB_OUTPUT
+          else
+            git fetch origin main
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              BASE="origin/${{ github.base_ref }}"
+            else
+              BASE="origin/main"
+            fi
+            FILES=$(git diff --name-only "$BASE"..HEAD \
+              | grep -E '^(extract|upload|etl)/.*\.py$' \
+              | grep -v '/tests/' \
+              | tr '\n' ' ')
+            echo "files=$FILES" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run quality checks (incremental)
+        if: steps.changed.outputs.files != '' && steps.changed.outputs.files != 'FULL'
+        run: uv run bash scripts/run_quality_ci.sh ${{ steps.changed.outputs.files }}
+
+      - name: Run full quality checks (main push)
+        if: steps.changed.outputs.files == 'FULL'
+        run: uv run bash scripts/run_quality_ci.sh
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync
+
+      - name: Get changed source files
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "files=FULL" >> $GITHUB_OUTPUT
+          else
+            git fetch origin main
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              BASE="origin/${{ github.base_ref }}"
+            else
+              BASE="origin/main"
+            fi
+            FILES=$(git diff --name-only "$BASE"..HEAD \
+              | grep -E '^(extract|upload|etl)/.*\.py$' \
+              | grep -v '/tests/' \
+              | tr '\n' ' ')
+            echo "files=$FILES" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run e2e tests (incremental)
+        if: steps.changed.outputs.files != '' && steps.changed.outputs.files != 'FULL'
+        run: |
+          MODULES=$(echo "${{ steps.changed.outputs.files }}" | tr ' ' '\n' | cut -d/ -f1 | sort -u | tr '\n' ' ')
+          E2E_DIRS=""
+          for mod in $MODULES; do
+            if [ -d "${mod}/tests" ]; then
+              E2E_DIRS+=" ${mod}/tests/"
+            fi
+          done
+          if [ -n "$E2E_DIRS" ]; then
+            uv run pytest -v $E2E_DIRS -k "e2e"
+          fi
+
+      - name: Run full e2e tests (main push)
+        if: steps.changed.outputs.files == 'FULL'
+        run: uv run pytest -v etl/tests/ extract/tests/ upload/tests/ -k "e2e"
