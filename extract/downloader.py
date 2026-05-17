@@ -1,6 +1,5 @@
 import os
 import httpx
-from bs4 import BeautifulSoup
 from pathlib import Path
 from typing import List, Set
 import logging
@@ -10,49 +9,22 @@ logger = logging.getLogger(__name__)
 
 class TLCDownloader:
     """
-    Responsible for extracting Parquet file links from the NYC TLC website
-    and downloading them idempotently.
+    Responsible for downloading Parquet files idempotently.
     """
     
-    def __init__(self, base_url: str, download_dir: str = "data/raw"):
+    def __init__(self, download_dir: str = "data/raw"):
         """
         Initialize the downloader.
 
         Args:
-            base_url (str): The URL of the NYC TLC trip record data page.
             download_dir (str): The local directory where files will be stored.
         """
-        self.base_url = base_url
         self.download_dir = Path(download_dir)
         self.download_dir.mkdir(parents=True, exist_ok=True)
         
         # Use a synchronous httpx client. 
         # Timeout is set to None for the main client to avoid timeouts on large files.
         self.client = httpx.Client(follow_redirects=True, timeout=None)
-
-    def fetch_parquet_urls(self) -> Set[str]:
-        """
-        Scrapes the NYC TLC page to find all links ending in .parquet.
-
-        Returns:
-            Set[str]: A set of absolute URLs to Parquet files.
-        """
-        logger.info(f"Fetching Parquet URLs from: {self.base_url}")
-        response = self.client.get(self.base_url)
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.text, "html.parser")
-        links = set()
-        
-        for a in soup.find_all("a", href=True):
-            url = a["href"]
-            if url.endswith(".parquet"):
-                if url.startswith("/"):
-                    url = f"https://www.nyc.gov{url}"
-                links.add(url)
-                
-        logger.info(f"Found {len(links)} Parquet files.")
-        return links
 
     def download_file(self, url: str) -> Path:
         """
@@ -94,14 +66,16 @@ class TLCDownloader:
         
         return target_path
 
-    def run(self) -> List[Path]:
+    def run(self, urls: Set[str]) -> List[Path]:
         """
-        Orchestrates the extraction of all available files.
+        Downloads all provided URLs.
+
+        Args:
+            urls (Set[str]): A set of absolute URLs to download.
 
         Returns:
             List[Path]: A list of paths to the downloaded files.
         """
-        urls = self.fetch_parquet_urls()
         downloaded_files = []
         
         for url in urls:
