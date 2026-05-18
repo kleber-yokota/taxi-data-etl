@@ -1,4 +1,4 @@
-[       project]
+[project]
 name = "taxi-data-etl"
 version = "0.1.0"
 description = "Modular ELT pipeline for NYC Taxi data"
@@ -34,3 +34,12 @@ packages = ["extract"]
 [tool.mutmut]
 paths_to_mutate = ["extract"]
 pytest_add_cli_args_test_selection = ["tests/unit", "tests/e2e"]
+
+
+[project.optional-dependencies]
+quality = [
+    "radon",
+    "xenon",
+    "cohesion",
+    "vulture",
+]
