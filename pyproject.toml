@@ -21,6 +21,7 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "mutmut>=1.5.0",
     "atheris>=1.5.0",
+    "respx>=0.23.1",
 ]
 
 [build-system]
@@ -32,4 +33,4 @@ packages = ["extract"]
 
 [tool.mutmut]
 paths_to_mutate = ["extract"]
-pytest_add_cli_args_test_selection = ["tests/unit"]
+pytest_add_cli_args_test_selection = ["tests/unit", "tests/e2e"]
