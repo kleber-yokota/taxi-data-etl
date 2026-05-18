@@ -98,7 +98,7 @@ for module in "${MODULES[@]}"; do
     while IFS= read -r -d '' f; do
         basename_f=$(basename "$f")
         case "$basename_f" in
-            test_fuzz.py|test_e2e*.py|test_properties.py|test_helpers.py|test_mutant_killing.py)
+            *fuzz*|test_e2e*.py|test_properties.py|test_helpers.py|test_mutant_killing.py)
                 continue ;;
             test_*.py)
                 UNIT_TESTS+=("$f") ;;
@@ -111,7 +111,14 @@ for module in "${MODULES[@]}"; do
     fi
 
     echo "  Unit tests: ${UNIT_TESTS[*]}"
-    TEST_CMD="python -m pytest ${UNIT_TESTS[*]} -q"
+    # Build absolute paths so mutmut's chdir into mutants/ doesn't break
+    # relative references. --norecursedirs stops pytest from auto-discovering
+    # tests/fuzz or tests/e2e even when run from inside the mutants/ mirror.
+    ABS_UNIT_TESTS=()
+    for t in "${UNIT_TESTS[@]}"; do
+        ABS_UNIT_TESTS+=("$(realpath "$t")")
+    done
+    TEST_CMD="python -m pytest ${ABS_UNIT_TESTS[*]} --norecursedirs=mutants --norecursedirs=tests/fuzz --norecursedirs=tests/e2e -q"
 
     # Save original pyproject.toml
     ORIGINAL_PYPROJECT=$(cat pyproject.toml)
@@ -125,6 +132,10 @@ build-backend = "setuptools.build_meta"
 name = "nyc-taxi-clickhouse-etl"
 version = "0.1.0"
 requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]
+norecursedirs = ["mutants", "tests/fuzz", "tests/e2e", ".venv", "__pycache__"]
 
 [tool.mutmut]
 paths_to_mutate = ["${module}"]

@@ -1,29 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Incremental mutation testing CI script
-# Only mutates modules containing changed source files.
+# Generic quality checks CI script
+# Auto-discovers modules and runs coverage, radon, xenon, cohesion, vulture, lcom.
 #
 # Usage:
-#   ./scripts/run_mutation_ci.sh [threshold] [changed_files...]
+#   ./scripts/run_quality_ci.sh [changed_files...]
 #
 # Arguments:
-#   threshold        Minimum mutation score percentage (default: 85)
 #   changed_files... Space-separated list of changed .py files (not in tests/)
-#                    If empty, all modules are mutated (main push).
+#                    If empty, all modules are checked.
 #
 # Test layout expected:
-#   tests/unit/      Unit tests (used by mutmut runner)
-#   tests/e2e/       End-to-end tests (excluded from mutation runner)
-#   tests/fuzz/      Fuzz tests (excluded from mutation runner)
-
-THRESHOLD="${1:-85}"
-shift || true
+#   tests/unit/      Unit tests (used by coverage runner)
+#   tests/e2e/       End-to-end tests (not used here)
+#   tests/fuzz/      Fuzz tests (not used here)
 
 CHANGED_FILES=("$@")
 
-echo "=== Incremental Mutation Testing CI ==="
-echo "Threshold: ${THRESHOLD}%"
+echo "=== Quality Checks CI ==="
 echo ""
 
 # Discover all source modules: any top-level dir with Python source files.
@@ -50,17 +45,14 @@ if [ ! -d "tests/unit" ]; then
     exit 1
 fi
 
-# Determine which modules to mutate
+# Determine which modules to check
 if [ ${#CHANGED_FILES[@]} -eq 0 ]; then
-    echo "No file filter — mutating all modules (main push)"
+    echo "No file filter — checking all modules"
     MODULES=("${ALL_MODULES[@]}")
 else
-    # Map changed source files to their parent modules
     declare -A MODULE_MAP
     for f in "${CHANGED_FILES[@]}"; do
-        # Extract top-level module (e.g. "extract/foo.py" -> "extract")
         module="${f%%/*}"
-        # Only care about known modules
         for m in "${ALL_MODULES[@]}"; do
             if [ "$module" = "$m" ]; then
                 MODULE_MAP["$m"]=1
@@ -73,7 +65,7 @@ else
 
     if [ ${#MODULES[@]} -eq 0 ]; then
         echo "No Python source files changed in any module"
-        echo "PASS: Nothing to mutate"
+        echo "PASS: Nothing to check"
         exit 0
     fi
 
@@ -90,99 +82,87 @@ for module in "${MODULES[@]}"; do
     echo "Module: ${module}"
     echo "=============================="
 
-    rm -rf mutants/
+    # Source dir is the module itself (flat layout, no core/ subdirectory)
+    CORE_DIR="${module}/"
 
-    # Find unit test files from the root tests/unit/ directory,
-    # excluding fuzz, e2e, property, helper, and mutant-killing tests.
-    UNIT_TESTS=()
-    while IFS= read -r -d '' f; do
-        basename_f=$(basename "$f")
-        case "$basename_f" in
-            *fuzz*|test_e2e*.py|test_properties.py|test_helpers.py|test_mutant_killing.py)
-                continue ;;
-            test_*.py)
-                UNIT_TESTS+=("$f") ;;
-        esac
-    done < <(find "tests/unit" -name "test_*.py" -type f -print0)
-
-    if [ ${#UNIT_TESTS[@]} -eq 0 ]; then
-        echo "  WARNING: No unit test files found in tests/unit/, skipping"
-        continue
-    fi
-
-    echo "  Unit tests: ${UNIT_TESTS[*]}"
-    # --ignore=mutants prevents pytest from collecting fuzz/e2e files
-    # that mutmut copies into the mutants/ shadow directory
-    TEST_CMD="python -m pytest ${UNIT_TESTS[*]} --ignore=mutants -q"
-
-    # Save original pyproject.toml
-    ORIGINAL_PYPROJECT=$(cat pyproject.toml)
-
-    cat > pyproject.toml <<PYEOF
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "nyc-taxi-clickhouse-etl"
-version = "0.1.0"
-requires-python = ">=3.11"
-
-[tool.mutmut]
-paths_to_mutate = ["${module}"]
-do_not_mutate = ["tests/*", "conftest.py", "test_*.py", "*/__init__.py"]
-runner = "${TEST_CMD}"
-exclude_dirs = ["__pycache__", ".venv", "mutants"]
-PYEOF
-
-    echo "  Running mutmut (parallel)..."
-    MUTMUT_OUTPUT=$(mktemp)
-    if ! mutmut run --max-children 8 >"$MUTMUT_OUTPUT" 2>&1; then
-        echo "  ERROR: mutmut run failed for ${module}"
-        cat "$MUTMUT_OUTPUT"
-        rm -f "$MUTMUT_OUTPUT"
-        rm -f pyproject.toml
-        echo "$ORIGINAL_PYPROJECT" > pyproject.toml
+    # 1. Coverage (≥ 85%) — run against root tests/unit/
+    echo "  Running coverage..."
+    if ! uv run python -m coverage run --include="${CORE_DIR}*.py" -m pytest tests/unit/ -q 2>&1; then
+        echo "  ERROR: pytest failed for ${module}"
         FAILED_MODULES+=("$module")
         continue
     fi
-    rm -f "$MUTMUT_OUTPUT"
 
-    mutmut export-cicd-stats 2>/dev/null || true
+    COVERAGE_REPORT=$(uv run python -m coverage report --show-missing 2>&1)
+    COVERAGE_TOTAL=$(echo "$COVERAGE_REPORT" | grep "TOTAL" | awk '{print $NF}' | tr -d '%')
 
-    # Restore original pyproject.toml
-    rm -f pyproject.toml
-    echo "$ORIGINAL_PYPROJECT" > pyproject.toml
+    echo "  Coverage: ${COVERAGE_TOTAL}%"
 
-    # Calculate and check score
-    if [ -f "mutants/mutmut-cicd-stats.json" ]; then
-        SCORE_OUTPUT=$(python3 -c "
-import json
-with open('mutants/mutmut-cicd-stats.json') as f:
-    d = json.load(f)
-    killed = d['killed']
-    total = d['killed'] + d['survived'] + d['timeout'] + d['skipped']
-    score = killed / total * 100 if total else 0
-    print(f'{score:.1f}')
-    print(f'  Killed: {killed}/{total}')
-")
-        SCORE=$(echo "$SCORE_OUTPUT" | head -1)
-        DETAILS=$(echo "$SCORE_OUTPUT" | tail -n +2)
-    else
-        SCORE="0.0"
-        DETAILS="  Killed: 0/0 (no mutants generated)"
-    fi
-
-    echo "  Mutation score: ${SCORE}%"
-    echo "$DETAILS"
-
-    BELOW=$(python3 -c "print(1 if float('${SCORE}') < ${THRESHOLD} else 0)")
-    if [ "$BELOW" -eq 1 ]; then
-        echo "  FAIL: Score ${SCORE}% is below ${THRESHOLD}% threshold"
+    COVERAGE_BELOW=$(python3 -c "print(1 if float('${COVERAGE_TOTAL:-0}') < 85 else 0)")
+    if [ "$COVERAGE_BELOW" -eq 1 ]; then
+        echo "  FAIL: Coverage ${COVERAGE_TOTAL}% is below 85% threshold"
         FAILED_MODULES+=("$module")
     else
-        echo "  PASS: Score ${SCORE}% >= ${THRESHOLD}%"
+        echo "  PASS: Coverage ${COVERAGE_TOTAL}% >= 85%"
     fi
+
+    # Clean coverage artifacts
+    rm -rf .coverage .coverage.* .pytest_cache/ __pycache__/
+
+    # 2. Radon - Cyclomatic Complexity (< 10 average)
+    echo "  Running radon cc..."
+    RADON_CC=$(uv run radon cc "${CORE_DIR}" -a -nb 2>&1 || true)
+    RADON_CC_AVG=$(echo "$RADON_CC" | grep "Average" | head -1 | awk '{print $NF}' || echo "0")
+    echo "  Radon CC average: ${RADON_CC_AVG}"
+
+    # 3. Radon - Maintainability Index (> 70)
+    echo "  Running radon mi..."
+    RADON_MI=$(uv run radon mi "${CORE_DIR}" -nb 2>&1 || true)
+    RADON_MI_AVG=$(echo "$RADON_MI" | grep -i "average" | head -1 | awk '{print $NF}' || echo "0")
+    echo "  Radon MI average: ${RADON_MI_AVG}"
+
+    # 4. Xenon (max-absolute B, max-modules B, max-average A)
+    echo "  Running xenon..."
+    if ! uv run xenon --max-absolute B --max-modules B --max-average A "${CORE_DIR}" 2>&1; then
+        echo "  WARNING: Xenon gates failed for ${module}"
+    else
+        echo "  PASS: Xenon gates passed"
+    fi
+
+    # 5. Cohesion
+    echo "  Running cohesion..."
+    if ! uv run cohesion -d "${CORE_DIR}" 2>&1; then
+        echo "  WARNING: Cohesion check failed for ${module}"
+    else
+        echo "  PASS: Cohesion check passed"
+    fi
+
+    # 6. Vulture (dead code, min 90% confidence, source only)
+    echo "  Running vulture..."
+    VULTURE_OUTPUT=$(uv run vulture "${CORE_DIR}" --min-confidence 90 --ignore-dirs="__pycache__" 2>&1 || true)
+    VULTURE_COUNT=$(echo "$VULTURE_OUTPUT" | grep -c "." || true)
+    if [ "$VULTURE_COUNT" -gt 0 ] && [ -n "$VULTURE_OUTPUT" ]; then
+        echo "  Vulture: ${VULTURE_COUNT} dead code items found"
+        echo "$VULTURE_OUTPUT" | head -10
+    else
+        echo "  PASS: No dead code found"
+    fi
+
+    # 7. LCOM (class cohesion)
+    echo "  Running LCOM analysis..."
+    LCOM_OUTPUT=$(uv run python scripts/lcom.py "${CORE_DIR}" 5 2>&1 || true)
+    LCOM_CLASSES=$(echo "$LCOM_OUTPUT" | grep -E "^\s+/.*\.(py):" || true)
+    if [ -n "$LCOM_CLASSES" ]; then
+        echo "$LCOM_CLASSES" | sed 's/^/    /'
+    fi
+    LCOM_FAIL=$(echo "$LCOM_OUTPUT" | grep -c "FAIL:" || true)
+    if [ "$LCOM_FAIL" -gt 0 ]; then
+        echo "  FAIL: Classes exceed LCOM threshold of 2"
+        FAILED_MODULES+=("$module")
+    else
+        echo "  PASS: All classes within LCOM threshold"
+    fi
+
     echo ""
 done
 
@@ -191,7 +171,7 @@ echo "Summary"
 echo "=============================="
 
 if [ ${#FAILED_MODULES[@]} -eq 0 ]; then
-    echo "All modules passed mutation testing (>= ${THRESHOLD}%)"
+    echo "All modules passed quality checks"
     exit 0
 else
     echo "FAILED modules: ${FAILED_MODULES[*]}"

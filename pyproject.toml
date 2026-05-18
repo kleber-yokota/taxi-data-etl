@@ -43,3 +43,7 @@ quality = [
     "cohesion",
     "vulture",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit", "tests/e2e"]
+norecursedirs = ["mutants", "tests/fuzz", ".venv", "__pycache__"]
