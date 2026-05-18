@@ -6,9 +6,10 @@ concurrency:
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
+
 
 jobs:
   test:
@@ -118,7 +119,7 @@ jobs:
       - name: Run full fuzz tests (main push)
         if: steps.changed.outputs.files == 'FULL'
         run: |
-          uv run python extract/tests/downloaders/test_fuzz.py -runs=10000
+          uv run python extract/tests/downloaders/test_fuzz.py -runs=1000000
 
   mutation:
     runs-on: ubuntu-latest
