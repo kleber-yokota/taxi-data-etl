@@ -11,6 +11,11 @@ set -euo pipefail
 #   threshold        Minimum mutation score percentage (default: 85)
 #   changed_files... Space-separated list of changed .py files (not in tests/)
 #                    If empty, all modules are mutated (main push).
+#
+# Test layout expected:
+#   tests/unit/      Unit tests (used by mutmut runner)
+#   tests/e2e/       End-to-end tests (excluded from mutation runner)
+#   tests/fuzz/      Fuzz tests (excluded from mutation runner)
 
 THRESHOLD="${1:-85}"
 shift || true
@@ -21,21 +26,27 @@ echo "=== Incremental Mutation Testing CI ==="
 echo "Threshold: ${THRESHOLD}%"
 echo ""
 
-# Discover all modules: any top-level dir with Python source files and tests/
-# Excludes: mutants/, .venv/, build/, dist/, __pycache__, scripts/
+# Discover all source modules: any top-level dir with Python source files.
+# Excludes: mutants/, .venv/, build/, dist/, __pycache__, scripts/, tests/
 ALL_MODULES=()
 for dir in */; do
     dir="${dir%/}"
     case "$dir" in
         mutants|.venv|build|dist|__pycache__|scripts|tests) continue ;;
     esac
-    if [ -d "${dir}/tests" ] && [ "$(find "$dir" -maxdepth 2 -name "*.py" -not -path "*/tests/*" -not -name "conftest.py" 2>/dev/null | head -1)" ]; then
+    if [ "$(find "$dir" -maxdepth 2 -name "*.py" -not -name "conftest.py" 2>/dev/null | head -1)" ]; then
         ALL_MODULES+=("$dir")
     fi
 done
 
 if [ ${#ALL_MODULES[@]} -eq 0 ]; then
-    echo "No modules found (directories with core/ subdir, excluding mutants/)"
+    echo "No modules found (top-level dirs with .py files, excluding mutants/ etc.)"
+    exit 1
+fi
+
+# Require a root-level tests/unit/ directory
+if [ ! -d "tests/unit" ]; then
+    echo "ERROR: tests/unit/ directory not found at project root"
     exit 1
 fi
 
@@ -81,13 +92,8 @@ for module in "${MODULES[@]}"; do
 
     rm -rf mutants/
 
-    TEST_DIR="${module}/tests/"
-    if [ ! -d "$TEST_DIR" ]; then
-        echo "  WARNING: No tests/ directory, skipping"
-        continue
-    fi
-
-    # Find unit test files
+    # Find unit test files from the root tests/unit/ directory,
+    # excluding fuzz, e2e, property, helper, and mutant-killing tests.
     UNIT_TESTS=()
     while IFS= read -r -d '' f; do
         basename_f=$(basename "$f")
@@ -97,10 +103,10 @@ for module in "${MODULES[@]}"; do
             test_*.py)
                 UNIT_TESTS+=("$f") ;;
         esac
-    done < <(find "$TEST_DIR" -name "test_*.py" -type f -print0)
+    done < <(find "tests/unit" -name "test_*.py" -type f -print0)
 
     if [ ${#UNIT_TESTS[@]} -eq 0 ]; then
-        echo "  WARNING: No unit test files found, skipping"
+        echo "  WARNING: No unit test files found in tests/unit/, skipping"
         continue
     fi
 
@@ -122,7 +128,7 @@ requires-python = ">=3.11"
 
 [tool.mutmut]
 paths_to_mutate = ["${module}"]
-do_not_mutate = ["*/tests/*", "*/conftest.py", "*/test_*.py", "*/__init__.py"]
+do_not_mutate = ["tests/*", "conftest.py", "test_*.py", "*/__init__.py"]
 runner = "${TEST_CMD}"
 exclude_dirs = ["__pycache__", ".venv", "mutants"]
 PYEOF

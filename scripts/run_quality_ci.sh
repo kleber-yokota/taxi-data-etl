@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Generic quality checks CI script
-# Auto-discovers modules and runs coverage, radon, xenon, cohesion, vulture.
+# Auto-discovers modules and runs coverage, radon, xenon, cohesion, vulture, lcom.
 #
 # Usage:
 #   ./scripts/run_quality_ci.sh [changed_files...]
@@ -10,27 +10,38 @@ set -euo pipefail
 # Arguments:
 #   changed_files... Space-separated list of changed .py files (not in tests/)
 #                    If empty, all modules are checked.
+#
+# Test layout expected:
+#   tests/unit/      Unit tests (used by coverage runner)
+#   tests/e2e/       End-to-end tests (not used here)
+#   tests/fuzz/      Fuzz tests (not used here)
 
 CHANGED_FILES=("$@")
 
 echo "=== Quality Checks CI ==="
 echo ""
 
-# Discover all modules: any top-level dir with Python source files and tests/
-# Excludes: mutants/, .venv/, build/, dist/, __pycache__, scripts/
+# Discover all source modules: any top-level dir with Python source files.
+# Excludes: mutants/, .venv/, build/, dist/, __pycache__, scripts/, tests/
 ALL_MODULES=()
 for dir in */; do
     dir="${dir%/}"
     case "$dir" in
         mutants|.venv|build|dist|__pycache__|scripts|tests) continue ;;
     esac
-    if [ -d "${dir}/tests" ] && [ "$(find "$dir" -maxdepth 2 -name "*.py" -not -path "*/tests/*" -not -name "conftest.py" 2>/dev/null | head -1)" ]; then
+    if [ "$(find "$dir" -maxdepth 2 -name "*.py" -not -name "conftest.py" 2>/dev/null | head -1)" ]; then
         ALL_MODULES+=("$dir")
     fi
 done
 
 if [ ${#ALL_MODULES[@]} -eq 0 ]; then
-    echo "No modules found (directories with core/ subdir, excluding mutants/)"
+    echo "No modules found (top-level dirs with .py files, excluding mutants/ etc.)"
+    exit 1
+fi
+
+# Require a root-level tests/unit/ directory
+if [ ! -d "tests/unit" ]; then
+    echo "ERROR: tests/unit/ directory not found at project root"
     exit 1
 fi
 
@@ -71,16 +82,12 @@ for module in "${MODULES[@]}"; do
     echo "Module: ${module}"
     echo "=============================="
 
-    # Support both flat structure (etl/) and core/ structure (extract/, upload/)
-    if [ -d "${module}/core/" ]; then
-        CORE_DIR="${module}/core/"
-    else
-        CORE_DIR="${module}/"
-    fi
+    # Source dir is the module itself (flat layout, no core/ subdirectory)
+    CORE_DIR="${module}/"
 
-    # 1. Coverage (≥ 85%)
+    # 1. Coverage (≥ 85%) — run against root tests/unit/
     echo "  Running coverage..."
-    if ! uv run python -m coverage run --include="${CORE_DIR}*.py" -m pytest "${module}/tests/" -q 2>&1; then
+    if ! uv run python -m coverage run --include="${CORE_DIR}*.py" -m pytest tests/unit/ -q 2>&1; then
         echo "  ERROR: pytest failed for ${module}"
         FAILED_MODULES+=("$module")
         continue
@@ -132,9 +139,8 @@ for module in "${MODULES[@]}"; do
 
     # 6. Vulture (dead code, min 90% confidence, source only)
     echo "  Running vulture..."
-    # Exclude tests/ and conftest.py — only check production source
-    VULTURE_OUTPUT=$(uv run vulture "${CORE_DIR}" --min-confidence 90 --ignore-dirs="tests,__pycache__" 2>&1 || true)
-    VULTURE_COUNT=$(echo "$VULTURE_OUTPUT" | wc -l | tr -d ' ')
+    VULTURE_OUTPUT=$(uv run vulture "${CORE_DIR}" --min-confidence 90 --ignore-dirs="__pycache__" 2>&1 || true)
+    VULTURE_COUNT=$(echo "$VULTURE_OUTPUT" | grep -c "." || true)
     if [ "$VULTURE_COUNT" -gt 0 ] && [ -n "$VULTURE_OUTPUT" ]; then
         echo "  Vulture: ${VULTURE_COUNT} dead code items found"
         echo "$VULTURE_OUTPUT" | head -10
@@ -142,7 +148,7 @@ for module in "${MODULES[@]}"; do
         echo "  PASS: No dead code found"
     fi
 
-   # 7. LCOM (class cohesion)
+    # 7. LCOM (class cohesion)
     echo "  Running LCOM analysis..."
     LCOM_OUTPUT=$(uv run python scripts/lcom.py "${CORE_DIR}" 5 2>&1 || true)
     LCOM_CLASSES=$(echo "$LCOM_OUTPUT" | grep -E "^\s+/.*\.(py):" || true)
