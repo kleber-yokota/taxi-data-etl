@@ -5,7 +5,7 @@ from typing import Iterable, List, Set
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-BASE_S3_URL = "https://d37ci68n02y6s.cloudfront.net/trip-data/"
+BASE_S3_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data/"
 VALID_DATASETS = {"yellow", "green", "fhv", "hvfhv"}
 
 
