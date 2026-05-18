@@ -6,9 +6,9 @@ concurrency:
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   test:
@@ -158,13 +158,17 @@ jobs:
             echo "files=$FILES" >> $GITHUB_OUTPUT
           fi
 
-      - name: Run mutation CI (incremental)
+      - name: Run mutation tests (incremental)
         if: steps.changed.outputs.files != '' && steps.changed.outputs.files != 'FULL'
-        run: uv run bash scripts/run_mutation_ci.sh 85 ${{ steps.changed.outputs.files }}
+        run: |
+          uv run mutmut run
+          uv run mutmut export-cicd-stats | uv run python -c "import json, sys; d=json.load(sys.stdin); s=(d.get('killed',0)+d.get('timeout',0))/d.get('total',1)*100; print(f'Mutation Score: {s:.2f}%'); sys.exit(0 if s>=85 else 1)"
 
-      - name: Run mutation CI (full)
+      - name: Run mutation tests (full)
         if: steps.changed.outputs.files == 'FULL'
-        run: uv run bash scripts/run_mutation_ci.sh 85
+        run: |
+          uv run mutmut run
+          uv run mutmut export-cicd-stats | uv run python -c "import json, sys; d=json.load(sys.stdin); s=(d.get('killed',0)+d.get('timeout',0))/d.get('total',1)*100; print(f'Mutation Score: {s:.2f}%'); sys.exit(0 if s>=85 else 1)"
 
   quality:
     runs-on: ubuntu-latest
