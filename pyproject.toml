@@ -20,9 +20,8 @@ testpaths = ["tests/unit"]
 norecursedirs = ["mutants", "tests/fuzz", "tests/e2e", ".venv", "__pycache__"]
 
 [tool.mutmut]
-paths_to_mutate = ["extract"]
+paths_to_mutate = ["extract", "upload"]
 do_not_mutate = ["tests/*", "conftest.py", "test_*.py", "*/__init__.py"]
-runner = "python -m pytest /home/nobu/projects/taxi-data-etl/tests/unit/test_downloader.py /home/nobu/projects/taxi-data-etl/tests/unit/test_parser_property.py /home/nobu/projects/taxi-data-etl/tests/unit/test_parser_unit.py --norecursedirs=mutants --norecursedirs=tests/fuzz --norecursedirs=tests/e2e -q"
 exclude_dirs = ["__pycache__", ".venv", "mutants"]
 
 [dependency-groups]
