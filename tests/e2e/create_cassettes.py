@@ -112,15 +112,15 @@ def main():
     )
 
     # --- downloader_idempotency.yaml ---
-    # 1ª chamada: HEAD + GET
-    # 2ª chamada: HEAD apenas (arquivo já existe com tamanho correto)
+    # 1st call: HEAD + GET
+    # 2nd call: HEAD only (file already exists with correct size)
     print("[2/5] downloader_idempotency.yaml")
     write_cassette(
         CASSETTE_DIR / "downloader_idempotency.yaml",
         interactions=[
             interaction(make_request("HEAD", TEST_URL), head),
             interaction(make_request("GET", TEST_URL), get),
-            interaction(make_request("HEAD", TEST_URL), head),  # 2ª chamada, sem GET
+            interaction(make_request("HEAD", TEST_URL), head),  # 2nd call, no GET
         ],
     )
 
