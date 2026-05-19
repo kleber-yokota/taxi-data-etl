@@ -503,3 +503,194 @@ def test_execute_download_with_retry_filename_extraction(tmp_path, caplog):
     # Must contain the filename "myfile.csv"
     assert any("myfile.csv" in msg for msg in log_messages), \
         f"Expected 'myfile.csv' in logs, got: {log_messages}"
+
+
+# ===========================================================================
+# 4. MUTATION-KILLING TESTS (respx-based, no mock.patch)
+# ===========================================================================
+# These tests use respx for HTTP mocking instead of unittest.mock.patch
+# to ensure they work correctly in mutmut's mirrored environment.
+
+
+@respx.mock
+def test_get_remote_size_http_error_logs_exact_message(caplog):
+    """
+    Tests that get_remote_size logs the exact HTTP error message for non-403/404 errors.
+    
+    Kills mutations that replace logger.error(...) with logger.error(None) (mutmut_19).
+    """
+    import logging
+
+    url = "http://example.com/file.csv"
+    respx.head(url).mock(return_value=httpx.Response(500))
+
+    with caplog.at_level(logging.ERROR):
+        with httpx.Client() as client:
+            result = get_remote_size(client, url)
+
+    assert result is None
+    assert any(
+        "HTTP error for" in record.message and url in record.message
+        for record in caplog.records
+    ), f"Expected HTTP error log for {url}, got: {[r.message for r in caplog.records]}"
+
+
+@respx.mock
+def test_execute_download_with_retry_exact_retry_count_respx(tmp_path):
+    """
+    Tests that exactly MAX_RETRIES (3) attempts are made using respx-based HTTP mocking.
+    
+    Unlike mock.patch-based tests, this works correctly in mutmut's mirrored
+    environment because respx patches at the transport layer.
+    
+    Kills mutations that alter the loop range to 4 attempts (mutmut_12).
+    """
+    url = "http://example.com/file.csv"
+    temp_path = tmp_path / "temp.tmp"
+
+    # All 3+ attempts will fail with HTTP 500
+    respx.get(url).mock(return_value=httpx.Response(500))
+
+    with patch("time.sleep"):
+        with pytest.raises(httpx.HTTPStatusError):
+            with httpx.Client() as client:
+                execute_download_with_retry(client, url, temp_path)
+
+    # Must have made exactly MAX_RETRIES (3) HTTP attempts
+    assert len(respx.calls) == 3, (
+        f"Expected 3 HTTP attempts, got {len(respx.calls)}. "
+        f"If this is 4, the range(1, MAX_RETRIES+1) mutation (mutmut_12) survived."
+    )
+
+
+@respx.mock
+def test_execute_download_with_retry_checksum_mismatch_logs_warning(tmp_path, caplog):
+    """
+    Tests that a checksum mismatch logs a warning and does not raise.
+    
+    Kills mutations that:
+    - Replace `and not` with `or not` (mutmut_20)
+    - Remove `not` from verify_checksum (mutmut_21)
+    - Replace logger.warning(msg) with logger.warning(None) (mutmut_26)
+    """
+    import logging
+
+    url = "http://example.com/file.csv"
+    temp_path = tmp_path / "temp.tmp"
+    content = b"actual content"
+    wrong_hash = "0" * 64
+
+    respx.get(url).mock(return_value=httpx.Response(200, content=content))
+
+    with caplog.at_level(logging.WARNING):
+        with patch("time.sleep"):
+            with httpx.Client() as client:
+                execute_download_with_retry(client, url, temp_path, wrong_hash)
+
+    assert temp_path.read_bytes() == content
+    warning_messages = [r.message for r in caplog.records]
+    assert any(
+        "Checksum verification failed for file.csv" in msg
+        for msg in warning_messages
+    ), f"Expected checksum warning in logs, got: {warning_messages}"
+
+
+@respx.mock
+def test_execute_download_with_retry_checksum_correct_no_warning(tmp_path, caplog):
+    """
+    Tests that a correct checksum produces no warning log.
+    
+    Kills mutations that alter verify_checksum arguments (mutmut_22, mutmut_23,
+    mutmut_24, mutmut_25) by ensuring the correct checksum path is verified.
+    """
+    import logging
+    import hashlib
+
+    url = "http://example.com/file.csv"
+    temp_path = tmp_path / "temp.tmp"
+    content = b"valid content"
+    expected_hash = hashlib.sha256(content).hexdigest()
+
+    respx.get(url).mock(return_value=httpx.Response(200, content=content))
+
+    with caplog.at_level(logging.WARNING):
+        with patch("time.sleep"):
+            with httpx.Client() as client:
+                execute_download_with_retry(client, url, temp_path, expected_hash)
+
+    assert temp_path.read_bytes() == content
+    warning_messages = [r.message for r in caplog.records]
+    assert not any(
+        "Checksum verification failed" in msg
+        for msg in warning_messages
+    ), f"Unexpected checksum warning for correct hash: {warning_messages}"
+
+
+@respx.mock
+def test_download_file_runtime_error_message(tmp_path):
+    """
+    Tests that RuntimeError contains a descriptive message when remote size is unavailable.
+    
+    Kills mutations that replace RuntimeError(msg) with RuntimeError(None) (mutmut_29).
+    """
+    download_dir = tmp_path / "rterror"
+    url = "http://example.com/data.csv"
+
+    # HEAD returns 500, causing get_remote_size to return None
+    respx.head(url).mock(return_value=httpx.Response(500))
+
+    with pytest.raises(RuntimeError, match="Could not determine remote size"):
+        download_file(url, download_dir)
+
+
+@respx.mock
+def test_download_file_with_expected_hash_success(tmp_path):
+    """
+    Tests download_file with an expected_hash that matches the downloaded content.
+    
+    Kills mutations that drop the expected_hash argument when calling
+    execute_download_with_retry (mutmut_39, mutmut_43).
+    """
+    import hashlib
+
+    download_dir = tmp_path / "hash_check"
+    url = "http://example.com/data.csv"
+    content = b"content to verify"
+
+    respx.head(url).mock(
+        return_value=httpx.Response(200, headers={"Content-Length": str(len(content))})
+    )
+    respx.get(url).mock(return_value=httpx.Response(200, content=content))
+
+    path, file_hash = download_file(url, download_dir, hashlib.sha256(content).hexdigest())
+
+    assert path.exists()
+    assert path.read_bytes() == content
+    assert file_hash == hashlib.sha256(content).hexdigest()
+
+
+@respx.mock
+def test_download_file_success_log(tmp_path, caplog):
+    """
+    Tests that download_file logs a success message upon completion.
+    
+    Kills mutations that replace logger.info(msg) with logger.info(None) (mutmut_45).
+    """
+    import logging
+
+    download_dir = tmp_path / "success_log"
+    url = "http://example.com/data.csv"
+    content = b"log test content"
+
+    respx.head(url).mock(
+        return_value=httpx.Response(200, headers={"Content-Length": str(len(content))})
+    )
+    respx.get(url).mock(return_value=httpx.Response(200, content=content))
+
+    with caplog.at_level(logging.INFO):
+        download_file(url, download_dir)
+
+    assert any(
+        "Successfully finalized download: data.csv" in record.message
+        for record in caplog.records
+    ), f"Expected success log, got: {[r.message for r in caplog.records]}"
