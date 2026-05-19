@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["extract*", "upload*", "orchestrator*"]
+include = ["extract*", "upload*", "orchestrator*", "pipeline*"]
 exclude = ["mutants*", "tests*", ".venv*"]
 
 [tool.pytest.ini_options]

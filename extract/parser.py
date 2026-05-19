@@ -144,6 +144,10 @@ def generate_parquet_urls(
     """
     if datasets is None:
         datasets = VALID_DATASETS
+    if years is None:
+        years = range(2015, date.today().year + 1)
+    if months is None:
+        months = range(1, 13)
 
     v_datasets = _validate_datasets(datasets)
     v_years = _validate_years(years)
