@@ -8,10 +8,11 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27.0",
+    "boto3>=1.34",
 ]
 
 [tool.setuptools.packages.find]
-include = ["extract*"]
+include = ["extract*", "upload*"]
 exclude = ["mutants*", "tests*", ".venv*"]
 
 [tool.pytest.ini_options]
@@ -35,4 +36,6 @@ dev = [
   "radon>=6.0",
   "xenon>=0.9",
   "cohesion>=1.2",
+  "testcontainers[minio]>=4.6",
+  "atheris>=3.0.0",
 ]
