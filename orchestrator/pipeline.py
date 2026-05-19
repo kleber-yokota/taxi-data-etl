@@ -4,10 +4,14 @@ from enum import Enum
 from pathlib import Path
 from typing import Iterable, List, Optional
 
+from dotenv import load_dotenv
+
 from extract.downloader import DownloadResult, download_file
 from extract.hasher import Hasher, Sha256Hasher
 from extract.parser import generate_parquet_urls
 from upload.uploader import UploadResult, UploadStatus, upload_file
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
