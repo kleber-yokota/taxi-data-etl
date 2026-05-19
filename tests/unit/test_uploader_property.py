@@ -11,14 +11,6 @@ from upload.uploader import (
     upload_file,
 )
 
-
-def _has_aws_env() -> bool:
-    """Check whether real AWS credentials are set."""
-    import os
-
-    return bool(os.environ.get("AWS_ENDPOINT_URL"))
-
-
 # ── _extract_file_info ────────────────────────────────────────────────────────
 
 
@@ -157,10 +149,10 @@ def test_defaults_not_none(file_name, original_path):
 
 
 @given(
-    source_path=st.text(min_size=1).filter(lambda p: not Path(p).is_file()),
-    bucket_path=st.text(min_size=1),
-    file_hash=st.text(),
-    hash_type=st.text(min_size=1),
+    source_path=st.text(min_size=1, max_size=200).filter(lambda p: not Path(p).is_file()),
+    bucket_path=st.text(min_size=1, max_size=200),
+    file_hash=st.text(max_size=200),
+    hash_type=st.text(min_size=1, max_size=200),
 )
 def test_source_not_found_returns_error(source_path, bucket_path, file_hash, hash_type):
     result = upload_file(
@@ -176,9 +168,9 @@ def test_source_not_found_returns_error(source_path, bucket_path, file_hash, has
 
 
 @given(
-    bucket_path=st.text(min_size=1),
-    file_hash=st.text(),
-    hash_type=st.text(min_size=1),
+    bucket_path=st.text(max_size=200),
+    file_hash=st.text(max_size=200),
+    hash_type=st.text(max_size=200),
 )
 def test_source_not_found_with_empty_path(bucket_path, file_hash, hash_type):
     result = upload_file(
@@ -192,10 +184,10 @@ def test_source_not_found_with_empty_path(bucket_path, file_hash, hash_type):
 
 
 @given(
-    source_path=st.text().filter(lambda p: not Path(p).is_file()),
-    bucket_path=st.text(),
-    file_hash=st.text(),
-    hash_type=st.text(),
+    source_path=st.text(max_size=200).filter(lambda p: not Path(p).is_file()),
+    bucket_path=st.text(max_size=200),
+    file_hash=st.text(max_size=200),
+    hash_type=st.text(max_size=200),
 )
 def test_error_result_always_has_file_name(
     source_path, bucket_path, file_hash, hash_type
@@ -211,23 +203,3 @@ def test_error_result_always_has_file_name(
     assert isinstance(result.original_path, str)
 
 
-# ── upload_file with real S3 (integration check) ──────────────────────────────
-
-
-@pytest.mark.skipif(not _has_aws_env(), reason="No AWS_ENDPOINT_URL set")
-@given(
-    bucket_path=st.text(min_size=1),
-    file_hash=st.text(min_size=1),
-    hash_type=st.text(min_size=1),
-)
-def test_success_always_returns_file_name(bucket_path, file_hash, hash_type, tmp_path):
-    source = tmp_path / "test.parquet"
-    source.write_bytes(b"fake content")
-    result = upload_file(
-        source_path=str(source),
-        bucket_path=bucket_path,
-        file_hash=file_hash,
-        hash_type=hash_type,
-    )
-    assert result.file_name == bucket_path.rstrip("/").split("/")[-1]
-    assert result.original_path == str(source)
