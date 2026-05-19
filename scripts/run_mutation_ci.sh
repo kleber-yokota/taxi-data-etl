@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+PROJECT_ROOT=$(cd "$(dirname "$0")/.." && pwd)
+
 # Incremental mutation testing CI script
 # Only mutates modules containing changed source files.
 #
@@ -93,13 +95,20 @@ for module in "${MODULES[@]}"; do
     rm -rf mutants/
 
     # Find unit test files from the root tests/unit/ directory,
-    # excluding fuzz, e2e, property, helper, and mutant-killing tests.
+    # Exclude tests that depend on modules not being mutated.
+    # test_pipeline.py depends on orchestrator module — skip when mutating
+    # extract or upload alone to avoid ModuleNotFoundError in mutants/ mirror.
     UNIT_TESTS=()
     while IFS= read -r -d '' f; do
         basename_f=$(basename "$f")
         case "$basename_f" in
             *fuzz*|test_e2e*.py|test_properties.py|test_helpers.py|test_mutant_killing.py)
                 continue ;;
+            test_pipeline.py)
+                if [ "$module" != "orchestrator" ]; then
+                    continue
+                fi
+                ;&
             test_*.py)
                 UNIT_TESTS+=("$f") ;;
         esac
@@ -118,7 +127,7 @@ for module in "${MODULES[@]}"; do
     for t in "${UNIT_TESTS[@]}"; do
         ABS_UNIT_TESTS+=("$(realpath "$t")")
     done
-    TEST_CMD="python -m pytest ${ABS_UNIT_TESTS[*]} --norecursedirs=mutants --norecursedirs=tests/fuzz --norecursedirs=tests/e2e -q"
+    TEST_CMD="env PYTHONPATH=${PROJECT_ROOT} python -m pytest ${ABS_UNIT_TESTS[*]} --norecursedirs=mutants --norecursedirs=tests/fuzz --norecursedirs=tests/e2e -q"
 
     # Save original pyproject.toml
     ORIGINAL_PYPROJECT=$(cat pyproject.toml)
