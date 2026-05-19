@@ -7,14 +7,16 @@ import pytest
 import respx
 
 from extract.downloader import (
+    ChecksumError,
+    DownloadResult,
     NetworkError,
     download_file,
     execute_download_with_retry,
     get_remote_size,
     is_download_required,
     stream_to_disk,
-    verify_checksum,
 )
+from extract.hasher import Sha256Hasher
 
 # ==============================================================================
 # 1. PURE LOGIC TESTS (Without Mocks)
@@ -23,20 +25,22 @@ from extract.downloader import (
 # Using tmp_path is the recommended practice for testing file IO.
 
 
-def test_verify_checksum_correct(tmp_path):
-    """Tests that the checksum is validated correctly for actual content."""
+def test_sha256_hasher_correct(tmp_path):
+    """Tests that Sha256Hasher computes the correct hash."""
     file_path = tmp_path / "test.txt"
     content = b"hello world"
     file_path.write_bytes(content)
-    expected_hash = hashlib.sha256(content).hexdigest()
-    assert verify_checksum(file_path, expected_hash) is True
+    hasher = Sha256Hasher()
+    assert hasher.algorithm == "sha256"
+    assert hasher.hash(file_path) == hashlib.sha256(content).hexdigest()
 
 
-def test_verify_checksum_incorrect(tmp_path):
-    """Tests that the checksum fails for incorrect content."""
+def test_sha256_hasher_incorrect(tmp_path):
+    """Tests that Sha256Hasher detects content changes."""
     file_path = tmp_path / "test.txt"
     file_path.write_bytes(b"hello world")
-    assert verify_checksum(file_path, "wrong_hash") is False
+    hasher = Sha256Hasher()
+    assert hasher.hash(file_path) != hashlib.sha256(b"wrong content").hexdigest()
 
 
 def test_is_download_required_logic(tmp_path, caplog):
@@ -120,7 +124,7 @@ def test_execute_download_retry_behavior(tmp_path, caplog):
 
     with patch("time.sleep"):  # Prevents the test from waiting for retry delays
         with httpx.Client() as client:
-            execute_download_with_retry(client, url, temp_path)
+            execute_download_with_retry(client, url, temp_path, Sha256Hasher())
 
     assert temp_path.read_bytes() == b"recovered content"
     # Verify the filename was correctly extracted and used in the logs
@@ -148,12 +152,14 @@ def test_download_file_full_flow_success(tmp_path):
     respx.get(url).mock(return_value=httpx.Response(200, content=content))
 
     # Coordinator execution (testing the final behavior)
-    path, file_hash = download_file(url, download_dir)
+    result = download_file(url, download_dir, Sha256Hasher())
 
-    assert path.exists()
-    assert path.read_bytes() == content
-    assert path.name == "data.csv"
-    assert file_hash == hashlib.sha256(content).hexdigest()
+    assert result is not None
+    assert result.file_path.exists()
+    assert result.file_path.read_bytes() == content
+    assert result.file_path.name == "data.csv"
+    assert result.hash_value == hashlib.sha256(content).hexdigest()
+    assert result.hash_type == "sha256"
 
 
 @respx.mock
@@ -168,9 +174,10 @@ def test_download_file_nested_directory(tmp_path):
     )
     respx.get(url).mock(return_value=httpx.Response(200, content=content))
 
-    path, _ = download_file(url, download_dir)
+    result = download_file(url, download_dir, Sha256Hasher())
 
-    assert path.exists()
+    assert result is not None
+    assert result.file_path.exists()
     assert download_dir.exists()
 
 
@@ -192,10 +199,12 @@ def test_download_file_idempotency_behavior(tmp_path):
     # If GET is called, the test will fail because we configured a 404
     mock_get = respx.get(url).mock(return_value=httpx.Response(404))
 
-    result_path, result_hash = download_file(url, download_dir)
+    result = download_file(url, download_dir, Sha256Hasher())
 
-    assert result_path == target_path
-    assert result_hash == hashlib.sha256(content).hexdigest()
+    assert result is not None
+    assert result.file_path == target_path
+    assert result.hash_value == hashlib.sha256(content).hexdigest()
+    assert result.hash_type == "sha256"
     # Ensures that the download request (GET) was never triggered
     assert mock_get.call_count == 0
 
@@ -207,7 +216,7 @@ def test_download_file_forbidden_behavior(tmp_path, caplog):
     url = "http://example.com/forbidden.csv"
     respx.head(url).mock(return_value=httpx.Response(403))
 
-    result = download_file(url, download_dir)
+    result = download_file(url, download_dir, Sha256Hasher())
 
     assert result is None
     assert any("Access forbidden" in record.message for record in caplog.records)
@@ -220,7 +229,7 @@ def test_download_file_not_found_behavior(tmp_path, caplog):
     url = "http://example.com/missing.csv"
     respx.head(url).mock(return_value=httpx.Response(404))
 
-    result = download_file(url, download_dir)
+    result = download_file(url, download_dir, Sha256Hasher())
 
     assert result is None
     assert any("File not found" in record.message for record in caplog.records)
@@ -234,7 +243,7 @@ def test_download_file_network_error_behavior(tmp_path):
     respx.head(url).mock(side_effect=httpx.ConnectError("Connection failed"))
 
     with pytest.raises(NetworkError, match="Network connection failed"):
-        download_file(url, download_dir)
+        download_file(url, download_dir, Sha256Hasher())
 
 
 # ===========================================================================
@@ -265,7 +274,7 @@ def test_execute_download_with_retry_attempts_and_logs(tmp_path, caplog):
         with patch("time.sleep"):
             with patch("extract.downloader.stream_to_disk", side_effect=mock_stream_to_disk):
                 with pytest.raises(NetworkError) as exc_info:
-                    execute_download_with_retry(None, url, temp_path)
+                    execute_download_with_retry(None, url, temp_path, Sha256Hasher())
     
     # CRITICAL CHECK: Must have attempted 3 times
     assert call_count[0] == 3, f"Expected 3 attempts, got {call_count[0]}"
@@ -304,8 +313,8 @@ def test_execute_download_with_retry_exact_retry_count(tmp_path):
     with patch("time.sleep"):
         with patch("extract.downloader.stream_to_disk", side_effect=mock_stream_to_disk) as mock:
             with pytest.raises(NetworkError):
-                execute_download_with_retry(None, url, temp_path)
-    
+                execute_download_with_retry(None, url, temp_path, Sha256Hasher())
+
     # CRITICAL CHECK: Must call exactly 3 times
     assert call_count[0] == 3, f"Expected 3 calls to stream_to_disk, got {call_count[0]}"
     assert mock.call_count == 3, f"Expected mock.call_count == 3, got {mock.call_count}"
@@ -314,68 +323,68 @@ def test_execute_download_with_retry_exact_retry_count(tmp_path):
 def test_execute_download_with_retry_first_attempt_failure(tmp_path, caplog):
     """
     CRITICAL TEST: Simulates failure on the FIRST attempt.
-    
+
     This is the most dangerous mutation (mutmut_10) that skips the 1st attempt.
     If the code is correct, the failure must happen on attempt 1.
     """
     import logging
     from extract.downloader import NetworkError
-    
+
     url = "http://example.com/file.csv"
     temp_path = tmp_path / "temp.tmp"
-    
+
     # Mock that fails on 1st call using an object to persist state
     class MockState:
         def __init__(self):
             self.call_count = 0
-        
+
         def __call__(self, *args, **kwargs):
             self.call_count += 1
             if self.call_count == 1:
                 raise NetworkError("First attempt failed")
             raise NetworkError("Subsequent failures")
-    
+
     mock_state = MockState()
-    
+
     with caplog.at_level(logging.WARNING):
         with patch("time.sleep"):
             with patch("extract.downloader.stream_to_disk", side_effect=mock_state):
                 with pytest.raises(NetworkError) as exc_info:
-                    execute_download_with_retry(None, url, temp_path)
-    
+                    execute_download_with_retry(None, url, temp_path, Sha256Hasher())
+
     # CHECK: Log must show "Attempt 1 failed" with the correct message
     log_messages = [record.message for record in caplog.records]
-    assert any("Attempt 1 failed" in msg and "First attempt failed" in msg for msg in log_messages), \
-        f"Expected 'Attempt 1 failed' with 'First attempt failed' in logs, got: {log_messages}"
-    
-    # The final exception will be "Subsequent failures" since the code tries 3 times
-    # The important thing is that the 1st attempt was made and failed
-    assert any("Attempt 1 failed" in msg for msg in log_messages), \
-        "Should have logged Attempt 1 failure"
+    assert any(
+        "Attempt 1 failed" in msg and "First attempt failed" in msg
+        for msg in log_messages
+    ), f"Expected 'Attempt 1 failed' with 'First attempt failed' in logs, got: {log_messages}"
+
+    assert any(
+        "Attempt 1 failed" in msg
+        for msg in log_messages
+    ), "Should have logged Attempt 1 failure"
 
 
 def test_execute_download_with_retry_temp_cleanup_on_failure(tmp_path):
     """
     CRITICAL TEST: Verifies temporary file is cleaned up after failure.
-    
+
     Detects mutations that alter stream_to_disk parameters (mutmut_14-19).
     """
     from extract.downloader import NetworkError
-    
+
     url = "http://example.com/file.csv"
     temp_path = tmp_path / "temp.tmp"
-    
+
     def mock_stream_to_disk(*args, **kwargs):
-        # Create a temporary file
         temp_path.write_bytes(b"failed content")
         raise NetworkError("Network error")
-    
+
     with patch("time.sleep"):
         with patch("extract.downloader.stream_to_disk", side_effect=mock_stream_to_disk):
             with pytest.raises(NetworkError):
-                execute_download_with_retry(None, url, temp_path)
-    
-    # CRITICAL CHECK: Temporary file must be deleted
+                execute_download_with_retry(None, url, temp_path, Sha256Hasher())
+
     assert not temp_path.exists(), "Temporary file should be cleaned up after failure"
 
 
@@ -403,8 +412,8 @@ def test_execute_download_with_retry_recovery_second_attempt(tmp_path):
     
     with patch("time.sleep"):
         with patch("extract.downloader.stream_to_disk", side_effect=mock_stream_to_disk):
-            execute_download_with_retry(None, url, temp_path)
-    
+            execute_download_with_retry(None, url, temp_path, Sha256Hasher())
+
     # CRITICAL CHECK: Must have attempted exactly 2 times
     assert call_count[0] == 2, f"Expected 2 attempts (1 fail, 1 success), got {call_count[0]}"
     assert temp_path.read_bytes() == success_content
@@ -413,28 +422,28 @@ def test_execute_download_with_retry_recovery_second_attempt(tmp_path):
 def test_execute_download_with_retry_recovery_third_attempt(tmp_path):
     """
     CRITICAL TEST: Simulates failure on first 2 and success on 3rd attempt.
-    
+
     Verifies the retry loop works correctly up to the maximum limit.
     Detects mutmut_10, mutmut_11, mutmut_12.
     """
     from extract.downloader import NetworkError
-    
+
     url = "http://example.com/file.csv"
     temp_path = tmp_path / "temp.tmp"
     success_content = b"final success"
-    
+
     call_count = [0]
-    
+
     def mock_stream_to_disk(*args, **kwargs):
         call_count[0] += 1
         if call_count[0] <= 2:
             raise NetworkError(f"Attempt {call_count[0]} failed")
         # Success on 3rd attempt
         temp_path.write_bytes(success_content)
-    
+
     with patch("time.sleep"):
         with patch("extract.downloader.stream_to_disk", side_effect=mock_stream_to_disk):
-            execute_download_with_retry(None, url, temp_path)
+            execute_download_with_retry(None, url, temp_path, Sha256Hasher())
     
     # CRITICAL CHECK: Must have attempted exactly 3 times
     assert call_count[0] == 3, f"Expected 3 attempts, got {call_count[0]}"
@@ -463,7 +472,7 @@ def test_execute_download_with_retry_respects_max_retries(tmp_path, caplog):
         with patch("time.sleep"):
             with patch("extract.downloader.stream_to_disk", side_effect=mock_stream_to_disk):
                 with pytest.raises(NetworkError):
-                    execute_download_with_retry(None, url, temp_path)
+                    execute_download_with_retry(None, url, temp_path, Sha256Hasher())
     
     # CRITICAL CHECK: Must not exceed MAX_RETRIES (3)
     assert call_count[0] <= 3, f"Exceeded MAX_RETRIES: {call_count[0]} attempts"
@@ -484,18 +493,18 @@ def test_execute_download_with_retry_filename_extraction(tmp_path, caplog):
     
     url = "http://example.com/path/to/myfile.csv"
     temp_path = tmp_path / "temp.tmp"
-    
+
     def mock_stream_to_disk(*args, **kwargs):
         temp_path.write_bytes(b"content")
-    
+
     # Configure logging to capture logs
     logger = logging.getLogger("extract.downloader")
     logger.setLevel(logging.INFO)
-    
+
     with caplog.at_level(logging.INFO):
         with patch("time.sleep"):
             with patch("extract.downloader.stream_to_disk", side_effect=mock_stream_to_disk):
-                execute_download_with_retry(None, url, temp_path)
+                execute_download_with_retry(None, url, temp_path, Sha256Hasher())
     
     # CHECK: Log must contain the correct filename
     log_messages = [record.message for record in caplog.records]
@@ -554,8 +563,7 @@ def test_execute_download_with_retry_exact_retry_count_respx(tmp_path):
     with patch("time.sleep"):
         with pytest.raises(httpx.HTTPStatusError):
             with httpx.Client() as client:
-                execute_download_with_retry(client, url, temp_path)
-
+                execute_download_with_retry(client, url, temp_path, Sha256Hasher())
     # Must have made exactly MAX_RETRIES (3) HTTP attempts
     assert len(respx.calls) == 3, (
         f"Expected 3 HTTP attempts, got {len(respx.calls)}. "
@@ -563,36 +571,8 @@ def test_execute_download_with_retry_exact_retry_count_respx(tmp_path):
     )
 
 
-@respx.mock
-def test_execute_download_with_retry_checksum_mismatch_logs_warning(tmp_path, caplog):
-    """
-    Tests that a checksum mismatch logs a warning and does not raise.
-    
-    Kills mutations that:
-    - Replace `and not` with `or not` (mutmut_20)
-    - Remove `not` from verify_checksum (mutmut_21)
-    - Replace logger.warning(msg) with logger.warning(None) (mutmut_26)
-    """
-    import logging
 
-    url = "http://example.com/file.csv"
-    temp_path = tmp_path / "temp.tmp"
-    content = b"actual content"
-    wrong_hash = "0" * 64
 
-    respx.get(url).mock(return_value=httpx.Response(200, content=content))
-
-    with caplog.at_level(logging.WARNING):
-        with patch("time.sleep"):
-            with httpx.Client() as client:
-                execute_download_with_retry(client, url, temp_path, wrong_hash)
-
-    assert temp_path.read_bytes() == content
-    warning_messages = [r.message for r in caplog.records]
-    assert any(
-        "Checksum verification failed for file.csv" in msg
-        for msg in warning_messages
-    ), f"Expected checksum warning in logs, got: {warning_messages}"
 
 
 @respx.mock
@@ -616,7 +596,7 @@ def test_execute_download_with_retry_checksum_correct_no_warning(tmp_path, caplo
     with caplog.at_level(logging.WARNING):
         with patch("time.sleep"):
             with httpx.Client() as client:
-                execute_download_with_retry(client, url, temp_path, expected_hash)
+                execute_download_with_retry(client, url, temp_path, Sha256Hasher(), expected_hash=expected_hash)
 
     assert temp_path.read_bytes() == content
     warning_messages = [r.message for r in caplog.records]
@@ -627,10 +607,38 @@ def test_execute_download_with_retry_checksum_correct_no_warning(tmp_path, caplo
 
 
 @respx.mock
+def test_execute_download_with_retry_checksum_mismatch_logs_warning(tmp_path, caplog):
+    """
+    Tests that a checksum mismatch logs a warning but does not raise.
+    The expected_hash is informational — used for dedup in upload, not validation.
+    """
+    import logging
+    import hashlib
+
+    url = "http://example.com/file.csv"
+    temp_path = tmp_path / "temp.tmp"
+    content = b"actual content"
+    wrong_hash = hashlib.sha256(b"different content").hexdigest()
+
+    respx.get(url).mock(return_value=httpx.Response(200, content=content))
+
+    with caplog.at_level(logging.WARNING):
+        with patch("time.sleep"):
+            with httpx.Client() as client:
+                execute_download_with_retry(client, url, temp_path, Sha256Hasher(), expected_hash=wrong_hash)
+
+    assert temp_path.read_bytes() == content
+    assert any(
+        "Checksum mismatch" in record.message
+        for record in caplog.records
+    ), f"Expected checksum warning in logs, got: {[r.message for r in caplog.records]}"
+
+
+@respx.mock
 def test_download_file_runtime_error_message(tmp_path):
     """
     Tests that RuntimeError contains a descriptive message when remote size is unavailable.
-    
+
     Kills mutations that replace RuntimeError(msg) with RuntimeError(None) (mutmut_29).
     """
     download_dir = tmp_path / "rterror"
@@ -640,14 +648,14 @@ def test_download_file_runtime_error_message(tmp_path):
     respx.head(url).mock(return_value=httpx.Response(500))
 
     with pytest.raises(RuntimeError, match="Could not determine remote size"):
-        download_file(url, download_dir)
+        download_file(url, download_dir, Sha256Hasher())
 
 
 @respx.mock
 def test_download_file_with_expected_hash_success(tmp_path):
     """
     Tests download_file with an expected_hash that matches the downloaded content.
-    
+
     Kills mutations that drop the expected_hash argument when calling
     execute_download_with_retry (mutmut_39, mutmut_43).
     """
@@ -662,11 +670,13 @@ def test_download_file_with_expected_hash_success(tmp_path):
     )
     respx.get(url).mock(return_value=httpx.Response(200, content=content))
 
-    path, file_hash = download_file(url, download_dir, hashlib.sha256(content).hexdigest())
+    result = download_file(url, download_dir, Sha256Hasher(), expected_hash=hashlib.sha256(content).hexdigest())
 
-    assert path.exists()
-    assert path.read_bytes() == content
-    assert file_hash == hashlib.sha256(content).hexdigest()
+    assert result is not None
+    assert result.file_path.exists()
+    assert result.file_path.read_bytes() == content
+    assert result.hash_value == hashlib.sha256(content).hexdigest()
+    assert result.hash_type == "sha256"
 
 
 @respx.mock
@@ -688,7 +698,7 @@ def test_download_file_success_log(tmp_path, caplog):
     respx.get(url).mock(return_value=httpx.Response(200, content=content))
 
     with caplog.at_level(logging.INFO):
-        download_file(url, download_dir)
+        download_file(url, download_dir, Sha256Hasher())
 
     assert any(
         "Successfully finalized download: data.csv" in record.message

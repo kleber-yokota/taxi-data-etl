@@ -1,10 +1,12 @@
-import hashlib
 import logging
 import time
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 import httpx
+
+from extract.hasher import Hasher
 
 logger = logging.getLogger(__name__)
 
@@ -33,22 +35,31 @@ class RemoteFileNotFoundError(Exception):
     pass
 
 
-# Retry configurations
-MAX_RETRIES = 3
-RETRY_DELAY = 2  # Initial delay in seconds
+@dataclass
+class DownloadResult:
+    """Holds the outcome of a file download.
 
-# ==========================================
-# 1. NETWORK & IO PRIMITIVES (Low Level)
-# ==========================================
+    Attributes:
+        file_path: The path to the downloaded file.
+        hash_value: The hash digest of the file content.
+        hash_type: The algorithm used to compute the hash.
+    """
+
+    file_path: Path
+    hash_value: str
+    hash_type: str
+
+
+MAX_RETRIES = 3
+RETRY_DELAY = 2
 
 
 def get_remote_size(client: httpx.Client, url: str) -> Optional[int]:
-    """
-    Retrieves the remote file size using an HTTP HEAD request.
+    """Retrieves the remote file size using an HTTP HEAD request.
 
     Args:
-        client (httpx.Client): The HTTP client instance.
-        url (str): The absolute URL of the file.
+        client: The HTTP client instance.
+        url: The absolute URL of the file.
 
     Returns:
         Optional[int]: The size of the file in bytes, or None if the request fails.
@@ -72,13 +83,12 @@ def get_remote_size(client: httpx.Client, url: str) -> Optional[int]:
 
 
 def stream_to_disk(client: httpx.Client, url: str, temp_path: Path) -> None:
-    """
-    Downloads the file content via streaming and writes it to a temporary file.
+    """Downloads the file content via streaming and writes it to a temporary file.
 
     Args:
-        client (httpx.Client): The HTTP client instance.
-        url (str): The absolute URL of the file.
-        temp_path (Path): The temporary path where the file will be written.
+        client: The HTTP client instance.
+        url: The absolute URL of the file.
+        temp_path: The temporary path where the file will be written.
     """
     with client.stream("GET", url) as response:
         response.raise_for_status()
@@ -87,51 +97,12 @@ def stream_to_disk(client: httpx.Client, url: str, temp_path: Path) -> None:
                 f.write(chunk)
 
 
-def compute_sha256(file_path: Path) -> str:
-    """
-    Computes the SHA-256 checksum of a file.
+def is_download_required(target_path: Path, remote_size: int) -> bool:
+    """Determines if a download is necessary based on file existence and size.
 
     Args:
-        file_path (Path): The path to the file.
-
-    Returns:
-        str: The SHA-256 hash string.
-    """
-    sha256_hash = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        for byte_block in iter(lambda: f.read(4096), b""):
-            sha256_hash.update(byte_block)
-    return sha256_hash.hexdigest()
-
-
-def verify_checksum(file_path: Path, expected_hash: str) -> bool:
-    """
-    Verifies the SHA-256 checksum of a file to ensure data integrity.
-
-    Args:
-        file_path (Path): The path to the file to verify.
-        expected_hash (str): The expected SHA-256 hash string.
-
-    Returns:
-        bool: True if the computed hash matches the expected hash, False otherwise.
-    """
-    return compute_sha256(file_path) == expected_hash
-
-
-# ==========================================
-# 2. IDEMPOTENCY LOGIC (Decision Layer)
-# ==========================================
-
-
-def is_download_required(
-    target_path: Path, remote_size: int, expected_hash: Optional[str] = None
-) -> bool:
-    """
-    Determines if a download is necessary based on file existence, size, and optional checksum.
-
-    Args:
-        target_path (Path): The final target path of the file.
-        remote_size (int): The expected size of the file on the remote server.
+        target_path: The final target path of the file.
+        remote_size: The expected size of the file on the remote server.
 
     Returns:
         bool: True if the file needs to be downloaded or updated, False if already complete.
@@ -148,22 +119,21 @@ def is_download_required(
     return False
 
 
-# ==========================================
-# 3. EXECUTION LOGIC (Retry Layer)
-# ==========================================
-
-
 def execute_download_with_retry(
-    client: httpx.Client, url: str, temp_path: Path, expected_hash: Optional[str] = None
+    client: httpx.Client,
+    url: str,
+    temp_path: Path,
+    hasher: Hasher,
+    expected_hash: Optional[str] = None,
 ) -> None:
-    """
-    Handles the retry loop for downloading a file and verifying its integrity.
+    """Handles the retry loop for downloading a file and verifying its integrity.
 
     Args:
-        client (httpx.Client): The HTTP client instance.
-        url (str): The absolute URL of the file.
-        temp_path (Path): The temporary path for the download.
-        expected_hash (Optional[str]): An optional SHA-256 hash for verification.
+        client: The HTTP client instance.
+        url: The absolute URL of the file.
+        temp_path: The temporary path for the download.
+        hasher: A Hasher instance to compute the file hash.
+        expected_hash: Optional expected hash for integrity verification.
 
     Raises:
         Exception: If the download fails after all retry attempts.
@@ -175,9 +145,13 @@ def execute_download_with_retry(
             logger.info(f"Downloading {filename} (Attempt {attempt}/{MAX_RETRIES})...")
             stream_to_disk(client, url, temp_path)
 
-            if expected_hash and not verify_checksum(temp_path, expected_hash):
-                logger.warning(f"Checksum verification failed for {filename}")
-            return  # Success
+            actual_hash = hasher.hash(temp_path)
+            if expected_hash and actual_hash != expected_hash:
+                logger.warning(
+                    f"Checksum mismatch for {filename}: "
+                    f"expected {expected_hash}, got {actual_hash}"
+                )
+            return
 
         except (httpx.HTTPError, ValueError, IOError, NetworkError) as e:
             logger.warning(f"Attempt {attempt} failed for {filename}: {e}")
@@ -188,37 +162,31 @@ def execute_download_with_retry(
                 logger.error(f"Maximum retry attempts reached for {filename}.")
                 raise
 
-            # Exponential backoff
             time.sleep(RETRY_DELAY * attempt)
 
 
-# ==========================================
-# 4. HIGH-LEVEL COORDINATOR (Facade)
-# ==========================================
-
-
 def download_file(
-    url: str, download_dir: Path, expected_hash: Optional[str] = None
-) -> Optional[Tuple[Path, str]]:
-    """
-    Coordinates the idempotent download process.
+    url: str,
+    download_dir: Path,
+    hasher: Hasher,
+    expected_hash: Optional[str] = None,
+) -> Optional[DownloadResult]:
+    """Coordinates the idempotent download process.
 
     Args:
-        url (str): The absolute URL of the file to download.
-        download_dir (Path): The directory where the file should be stored.
-        expected_hash (Optional[str]): An optional SHA-256 hash for integrity verification.
+        url: The absolute URL of the file to download.
+        download_dir: The directory where the file should be stored.
+        hasher: A Hasher instance to compute the file hash.
+        expected_hash: Optional expected hash for integrity verification.
 
     Returns:
-        Optional[Tuple[Path, str]]: A tuple containing the path to the downloaded file and its computed SHA-256 hash,
-        or None if access to the file was forbidden.
+        Optional[DownloadResult]: The download result, or None if access was forbidden.
 
     Raises:
         RuntimeError: If remote metadata cannot be retrieved.
         NetworkError: If a network connection failure occurs.
         Exception: If the download fails after all retry attempts.
     """
-
-    # Ensure the download directory exists
     download_dir.mkdir(parents=True, exist_ok=True)
 
     filename = url.split("/")[-1]
@@ -226,7 +194,6 @@ def download_file(
     temp_path = target_path.with_suffix(".tmp")
 
     with httpx.Client(follow_redirects=True, timeout=None) as client:
-        # Step 1: Idempotency Check
         try:
             remote_size = get_remote_size(client, url)
         except (FileForbiddenError, RemoteFileNotFoundError) as e:
@@ -237,13 +204,21 @@ def download_file(
             raise RuntimeError(f"Could not determine remote size for: {url}")
 
         if not is_download_required(target_path, remote_size):
-            return target_path, compute_sha256(target_path)
+            hash_value = hasher.hash(target_path)
+            return DownloadResult(
+                file_path=target_path,
+                hash_value=hash_value,
+                hash_type=hasher.algorithm,
+            )
 
-        # Step 2: Execute Download with Retry Logic
-        execute_download_with_retry(client, url, temp_path, expected_hash)
+        execute_download_with_retry(client, url, temp_path, hasher, expected_hash)
 
-        # Step 3: Atomic Finalization
         temp_path.replace(target_path)
         logger.info(f"Successfully finalized download: {filename}")
 
-    return target_path, compute_sha256(target_path)
+    hash_value = hasher.hash(target_path)
+    return DownloadResult(
+        file_path=target_path,
+        hash_value=hash_value,
+        hash_type=hasher.algorithm,
+    )

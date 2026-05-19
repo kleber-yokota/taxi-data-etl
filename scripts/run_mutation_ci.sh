@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+PROJECT_ROOT=$(cd "$(dirname "$0")/.." && pwd)
+
 # Incremental mutation testing CI script
 # Only mutates modules containing changed source files.
 #
@@ -93,13 +95,20 @@ for module in "${MODULES[@]}"; do
     rm -rf mutants/
 
     # Find unit test files from the root tests/unit/ directory,
-    # excluding fuzz, e2e, property, helper, and mutant-killing tests.
+    # Exclude tests that depend on modules not being mutated.
+    # test_pipeline.py depends on orchestrator module — skip when mutating
+    # extract or upload alone to avoid ModuleNotFoundError in mutants/ mirror.
     UNIT_TESTS=()
     while IFS= read -r -d '' f; do
         basename_f=$(basename "$f")
         case "$basename_f" in
             *fuzz*|test_e2e*.py|test_properties.py|test_helpers.py|test_mutant_killing.py)
                 continue ;;
+            test_pipeline.py|test_pipeline_property.py)
+                if [ "$module" != "orchestrator" ]; then
+                    continue
+                fi
+                ;&
             test_*.py)
                 UNIT_TESTS+=("$f") ;;
         esac
@@ -112,13 +121,23 @@ for module in "${MODULES[@]}"; do
 
     echo "  Unit tests: ${UNIT_TESTS[*]}"
     # Build absolute paths so mutmut's chdir into mutants/ doesn't break
-    # relative references. --norecursedirs stops pytest from auto-discovering
-    # tests/fuzz or tests/e2e even when run from inside the mutants/ mirror.
+    # relative references.
     ABS_UNIT_TESTS=()
     for t in "${UNIT_TESTS[@]}"; do
         ABS_UNIT_TESTS+=("$(realpath "$t")")
     done
-    TEST_CMD="python -m pytest ${ABS_UNIT_TESTS[*]} --norecursedirs=mutants --norecursedirs=tests/fuzz --norecursedirs=tests/e2e -q"
+
+    # Build a tests_dir list for mutmut so it only discovers the specific test
+    # files for this module (avoids auto-discovery of test_pipeline.py which
+    # imports orchestrator — a module not mirrored when mutating extract/upload).
+    TESTS_DIR_LINE=""
+    sep=""
+    for t in "${ABS_UNIT_TESTS[@]}"; do
+        TESTS_DIR_LINE+="${sep}\"$t\""
+        sep=", "
+    done
+
+    TEST_CMD="env PYTHONPATH=${PROJECT_ROOT} python -m pytest ${ABS_UNIT_TESTS[*]} --norecursedirs=tests/fuzz --norecursedirs=tests/e2e -q"
 
     # Save original pyproject.toml
     ORIGINAL_PYPROJECT=$(cat pyproject.toml)
@@ -133,12 +152,9 @@ name = "nyc-taxi-clickhouse-etl"
 version = "0.1.0"
 requires-python = ">=3.11"
 
-[tool.pytest.ini_options]
-testpaths = ["tests/unit"]
-norecursedirs = ["mutants", "tests/fuzz", "tests/e2e", ".venv", "__pycache__"]
-
 [tool.mutmut]
 paths_to_mutate = ["${module}"]
+tests_dir = [${TESTS_DIR_LINE}]
 do_not_mutate = ["tests/*", "conftest.py", "test_*.py", "*/__init__.py"]
 runner = "${TEST_CMD}"
 exclude_dirs = ["__pycache__", ".venv", "mutants"]
