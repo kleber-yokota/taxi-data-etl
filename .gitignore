@@ -4,3 +4,4 @@ crash-*
 .pytest_cache
 .hypothesis
 mutants
+*.egg-info
