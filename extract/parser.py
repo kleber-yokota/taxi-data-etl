@@ -1,6 +1,6 @@
 import logging
 from datetime import date
-from typing import Iterable, List, Set
+from typing import Iterable, List
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -9,8 +9,19 @@ BASE_S3_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data/"
 VALID_DATASETS = {"yellow", "green", "fhv", "hvfhv"}
 
 
-def _check_dataset(d):
-    """Validates a single dataset item."""
+def _check_dataset(d) -> str:
+    """Validates a single dataset item.
+    
+    Args:
+        d: Dataset name string.
+        
+    Returns:
+        str: Validated dataset name.
+        
+    Raises:
+        TypeError: If d is not a string.
+        ValueError: If d is not in VALID_DATASETS.
+    """
     if not isinstance(d, str):
         raise TypeError(f"Dataset name must be a string, got {type(d).__name__}")
     if d not in VALID_DATASETS:
@@ -18,15 +29,36 @@ def _check_dataset(d):
     return d
 
 
-def _check_year(y):
-    """Validates a single year item. Explicitly rejects booleans."""
+def _check_year(y) -> int:
+    """Validates a single year item. Explicitly rejects booleans.
+    
+    Args:
+        y: Year as integer.
+        
+    Returns:
+        int: Validated year.
+        
+    Raises:
+        TypeError: If y is not an integer (including booleans).
+    """
     if not isinstance(y, int) or isinstance(y, bool):
         raise TypeError(f"Year must be an integer, got {type(y).__name__}")
     return y
 
 
-def _check_month(m):
-    """Validates a single month item. Explicitly rejects booleans."""
+def _check_month(m) -> int:
+    """Validates a single month item. Explicitly rejects booleans.
+    
+    Args:
+        m: Month as integer (1-12).
+        
+    Returns:
+        int: Validated month.
+        
+    Raises:
+        TypeError: If m is not an integer (including booleans).
+        ValueError: If m is not in range 1-12.
+    """
     if not isinstance(m, int) or isinstance(m, bool):
         raise TypeError(f"Month must be an integer, got {type(m).__name__}")
     if not (1 <= m <= 12):
@@ -35,6 +67,19 @@ def _check_month(m):
 
 
 def _validate_datasets(datasets: Iterable[str]) -> List[str]:
+    """Validates and normalizes a collection of dataset names.
+    
+    Removes duplicates, validates each dataset name, and returns sorted list.
+    
+    Args:
+        datasets: Iterable of dataset name strings.
+        
+    Returns:
+        List[str]: Sorted list of unique, validated dataset names.
+        
+    Raises:
+        TypeError: If datasets is not iterable.
+    """
     if not isinstance(datasets, Iterable):
         raise TypeError("datasets must be iterable.")
     # Use set to avoid duplicates and sort for deterministic order
@@ -42,6 +87,19 @@ def _validate_datasets(datasets: Iterable[str]) -> List[str]:
 
 
 def _validate_years(years: Iterable[int]) -> List[int]:
+    """Validates and normalizes a collection of years.
+    
+    Removes duplicates, validates each year, and returns sorted list.
+    
+    Args:
+        years: Iterable of year integers.
+        
+    Returns:
+        List[int]: Sorted list of unique, validated years.
+        
+    Raises:
+        TypeError: If years is not iterable.
+    """
     if not isinstance(years, Iterable):
         raise TypeError("years must be iterable.")
     # Use set to avoid duplicates and sort for chronological order
@@ -49,6 +107,19 @@ def _validate_years(years: Iterable[int]) -> List[int]:
 
 
 def _validate_months(months: Iterable[int]) -> List[int]:
+    """Validates and normalizes a collection of months.
+    
+    Removes duplicates, validates each month, and returns sorted list.
+    
+    Args:
+        months: Iterable of month integers (1-12).
+        
+    Returns:
+        List[int]: Sorted list of unique, validated months.
+        
+    Raises:
+        TypeError: If months is not iterable.
+    """
     if not isinstance(months, Iterable):
         raise TypeError("months must be iterable.")
     # Use set to avoid duplicates and sort for chronological order
