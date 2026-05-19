@@ -32,4 +32,7 @@ dev = [
   "hypothesis>=6.0",
   "respx>=0.23.0",
   "vcrpy>=6.2.0",
+  "radon>=6.0",
+  "xenon>=0.9",
+  "cohesion>=1.2",
 ]
