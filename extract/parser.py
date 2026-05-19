@@ -2,7 +2,6 @@ import logging
 from datetime import date
 from typing import Iterable, List
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 BASE_S3_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data/"
@@ -128,7 +127,7 @@ def _validate_months(months: Iterable[int]) -> List[int]:
 
 def generate_parquet_urls(
     datasets: Iterable[str] = None,
-    years: Iterable[int] = range(2015, date.today().year),
+    years: Iterable[int] = range(2015, date.today().year + 1),
     months: Iterable[int] = range(1, 13),
 ) -> List[str]:
     """
