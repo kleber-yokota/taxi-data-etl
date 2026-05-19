@@ -91,7 +91,7 @@ jobs:
           FOUND=$(find tests/fuzz -name "test_fuzz*.py" -type f)
           for f in $FOUND; do
             echo "Running fuzz tests: ${f}..."
-            uv run python "$f" -runs=10000
+            uv run python "$f" -runs=100000
           done
 
       - name: Run full fuzz tests (main push)
