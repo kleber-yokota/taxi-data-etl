@@ -6,15 +6,6 @@ set -euo pipefail
 #
 # Usage:
 #   ./scripts/run_quality_ci.sh [changed_files...]
-#
-# Arguments:
-#   changed_files... Space-separated list of changed .py files (not in tests/)
-#                    If empty, all modules are checked.
-#
-# Test layout expected:
-#   tests/unit/      Unit tests (used by coverage runner)
-#   tests/e2e/       End-to-end tests (not used here)
-#   tests/fuzz/      Fuzz tests (not used here)
 
 CHANGED_FILES=("$@")
 
@@ -35,13 +26,7 @@ for dir in */; do
 done
 
 if [ ${#ALL_MODULES[@]} -eq 0 ]; then
-    echo "No modules found (top-level dirs with .py files, excluding mutants/ etc.)"
-    exit 1
-fi
-
-# Require a root-level tests/unit/ directory
-if [ ! -d "tests/unit" ]; then
-    echo "ERROR: tests/unit/ directory not found at project root"
+    echo "No modules found"
     exit 1
 fi
 
@@ -82,85 +67,89 @@ for module in "${MODULES[@]}"; do
     echo "Module: ${module}"
     echo "=============================="
 
-    # Source dir is the module itself (flat layout, no core/ subdirectory)
     CORE_DIR="${module}/"
+    MODULE_FAILED=0
 
-    # 1. Coverage (≥ 85%) — run against root tests/unit/
+    # 1. Coverage (≥ 85%)
     echo "  Running coverage..."
-    if ! uv run python -m coverage run --include="${CORE_DIR}*.py" -m pytest tests/unit/ -q 2>&1; then
-        echo "  ERROR: pytest failed for ${module}"
+    if ! uv run python -m coverage run --include="${CORE_DIR}*.py" -m pytest tests/unit/ tests/e2e/ -q 2>&1; then
+        echo "  FAIL: pytest failed for ${module}"
         FAILED_MODULES+=("$module")
         continue
     fi
 
     COVERAGE_REPORT=$(uv run python -m coverage report --show-missing 2>&1)
-    COVERAGE_TOTAL=$(echo "$COVERAGE_REPORT" | grep "TOTAL" | awk '{print $NF}' | tr -d '%')
+    COVERAGE_TOTAL=$(echo "$COVERAGE_REPORT" | grep "^TOTAL" | awk '{print $NF}' | tr -d '%')
 
     echo "  Coverage: ${COVERAGE_TOTAL}%"
-
-    COVERAGE_BELOW=$(python3 -c "print(1 if float('${COVERAGE_TOTAL:-0}') < 85 else 0)")
-    if [ "$COVERAGE_BELOW" -eq 1 ]; then
-        echo "  FAIL: Coverage ${COVERAGE_TOTAL}% is below 85% threshold"
-        FAILED_MODULES+=("$module")
-    else
+    if python3 -c "import sys; sys.exit(0 if float('${COVERAGE_TOTAL:-0}') >= 85 else 1)"; then
         echo "  PASS: Coverage ${COVERAGE_TOTAL}% >= 85%"
+    else
+        echo "  FAIL: Coverage ${COVERAGE_TOTAL}% is below 85%"
+        MODULE_FAILED=1
     fi
 
-    # Clean coverage artifacts
     rm -rf .coverage .coverage.* .pytest_cache/ __pycache__/
 
-    # 2. Radon - Cyclomatic Complexity (< 10 average)
+    # 2. Radon CC — informational only, no hard gate
     echo "  Running radon cc..."
-    RADON_CC=$(uv run radon cc "${CORE_DIR}" -a -nb 2>&1 || true)
-    RADON_CC_AVG=$(echo "$RADON_CC" | grep "Average" | head -1 | awk '{print $NF}' || echo "0")
+    RADON_CC_OUTPUT=$(uv run radon cc "${CORE_DIR}" -a -nb 2>&1 || true)
+    # radon outputs "Average complexity: A (1.5)" — extract the number in parens
+    RADON_CC_AVG=$(echo "$RADON_CC_OUTPUT" | grep -oP 'Average complexity: \w+ \(\K[0-9.]+' || echo "n/a")
     echo "  Radon CC average: ${RADON_CC_AVG}"
 
-    # 3. Radon - Maintainability Index (> 70)
+    # 3. Radon MI — informational only
     echo "  Running radon mi..."
-    RADON_MI=$(uv run radon mi "${CORE_DIR}" -nb 2>&1 || true)
-    RADON_MI_AVG=$(echo "$RADON_MI" | grep -i "average" | head -1 | awk '{print $NF}' || echo "0")
-    echo "  Radon MI average: ${RADON_MI_AVG}"
+    RADON_MI_OUTPUT=$(uv run radon mi "${CORE_DIR}" 2>&1 || true)
+    # radon mi outputs lines like "extract/foo.py - A"
+    echo "  Radon MI: $(echo "$RADON_MI_OUTPUT" | grep -v '^$' | head -5 || echo 'n/a')"
 
-    # 4. Xenon (max-absolute B, max-modules B, max-average A)
+    # 4. Xenon — hard gate
     echo "  Running xenon..."
     if ! uv run xenon --max-absolute B --max-modules B --max-average A "${CORE_DIR}" 2>&1; then
-        echo "  WARNING: Xenon gates failed for ${module}"
+        echo "  FAIL: Xenon complexity gates failed for ${module}"
+        MODULE_FAILED=1
     else
         echo "  PASS: Xenon gates passed"
     fi
 
-    # 5. Cohesion
+    # 5. Cohesion — hard gate
     echo "  Running cohesion..."
     if ! uv run cohesion -d "${CORE_DIR}" 2>&1; then
-        echo "  WARNING: Cohesion check failed for ${module}"
+        echo "  FAIL: Cohesion check failed for ${module}"
+        MODULE_FAILED=1
     else
         echo "  PASS: Cohesion check passed"
     fi
 
-    # 6. Vulture (dead code, min 90% confidence, source only)
+    # 6. Vulture — hard gate
     echo "  Running vulture..."
-    VULTURE_OUTPUT=$(uv run vulture "${CORE_DIR}" --min-confidence 90 --ignore-dirs="__pycache__" 2>&1 || true)
-    VULTURE_COUNT=$(echo "$VULTURE_OUTPUT" | grep -c "." || true)
-    if [ "$VULTURE_COUNT" -gt 0 ] && [ -n "$VULTURE_OUTPUT" ]; then
-        echo "  Vulture: ${VULTURE_COUNT} dead code items found"
-        echo "$VULTURE_OUTPUT" | head -10
+    # --exclude takes glob patterns; --ignore-dirs is not a valid flag
+    VULTURE_OUTPUT=$(uv run vulture "${CORE_DIR}" --min-confidence 90 --exclude "*/__pycache__/*" 2>&1 || true)
+    # Only count actual findings (file:line: pattern), ignore stderr noise
+    VULTURE_FINDINGS=$(echo "$VULTURE_OUTPUT" | grep -E "^[^:]+:[0-9]+:" || true)
+    if [ -n "$VULTURE_FINDINGS" ]; then
+        VULTURE_COUNT=$(echo "$VULTURE_FINDINGS" | wc -l | tr -d ' ')
+        echo "  FAIL: Vulture found ${VULTURE_COUNT} dead code item(s):"
+        echo "$VULTURE_FINDINGS" | sed 's/^/    /'
+        MODULE_FAILED=1
     else
         echo "  PASS: No dead code found"
     fi
 
-    # 7. LCOM (class cohesion)
+    # 7. LCOM — hard gate
     echo "  Running LCOM analysis..."
     LCOM_OUTPUT=$(uv run python scripts/lcom.py "${CORE_DIR}" 5 2>&1 || true)
-    LCOM_CLASSES=$(echo "$LCOM_OUTPUT" | grep -E "^\s+/.*\.(py):" || true)
-    if [ -n "$LCOM_CLASSES" ]; then
-        echo "$LCOM_CLASSES" | sed 's/^/    /'
-    fi
-    LCOM_FAIL=$(echo "$LCOM_OUTPUT" | grep -c "FAIL:" || true)
-    if [ "$LCOM_FAIL" -gt 0 ]; then
-        echo "  FAIL: Classes exceed LCOM threshold of 2"
-        FAILED_MODULES+=("$module")
+    if echo "$LCOM_OUTPUT" | grep -q "^FAIL:"; then
+        echo "$LCOM_OUTPUT" | grep -E "^FAIL:|^\s+" | sed 's/^/    /'
+        echo "  FAIL: Classes exceed LCOM threshold"
+        MODULE_FAILED=1
     else
         echo "  PASS: All classes within LCOM threshold"
+    fi
+
+    if [ "$MODULE_FAILED" -eq 1 ]; then
+        FAILED_MODULES+=("$module")
     fi
 
     echo ""
