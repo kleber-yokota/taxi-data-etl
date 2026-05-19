@@ -1,0 +1,7 @@
+**/__pycache__
+crash-*
+.venv
+.pytest_cache
+.hypothesis
+mutants
+*.egg-info

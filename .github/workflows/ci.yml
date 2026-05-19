@@ -6,9 +6,9 @@ concurrency:
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   test:
@@ -35,8 +35,8 @@ jobs:
               BASE="origin/main"
             fi
             FILES=$(git diff --name-only "$BASE"..HEAD \
-              | grep -E '^(extract|upload|etl)/.*\.py$' \
-              | grep -v '/tests/' \
+              | grep -E '^extract/.*\.py$' \
+              | grep -v '^tests/' \
               | tr '\n' ' ')
             if [ -z "$FILES" ]; then
               echo "No Python source files changed — skipping"
@@ -49,21 +49,12 @@ jobs:
       - name: Run unit tests
         if: steps.changed.outputs.files != '' && steps.changed.outputs.files != 'FULL'
         run: |
-          echo "Running tests for affected modules..."
-          MODULES=$(echo "${{ steps.changed.outputs.files }}" | tr ' ' '\n' | cut -d/ -f1 | sort -u | tr '\n' ' ')
-          TEST_DIRS=""
-          for mod in $MODULES; do
-            if [ -d "${mod}/tests" ]; then
-              TEST_DIRS+=" ${mod}/tests/"
-            fi
-          done
-          if [ -n "$TEST_DIRS" ]; then
-            uv run pytest -v $TEST_DIRS
-          fi
+          echo "Running unit tests for affected modules..."
+          uv run pytest -v tests/unit/
 
       - name: Run full unit tests (main push)
         if: steps.changed.outputs.files == 'FULL'
-        run: uv run pytest -v etl/tests/ extract/tests/ upload/tests/
+        run: uv run pytest -v tests/unit/
 
   fuzz:
     runs-on: ubuntu-latest
@@ -88,8 +79,8 @@ jobs:
               BASE="origin/main"
             fi
             FILES=$(git diff --name-only "$BASE"..HEAD \
-              | grep -E '^(extract|upload|etl)/.*\.py$' \
-              | grep -v '/tests/' \
+              | grep -E '^extract/.*\.py$' \
+              | grep -v '^tests/' \
               | tr '\n' ' ')
             echo "files=$FILES" >> $GITHUB_OUTPUT
           fi
@@ -97,30 +88,20 @@ jobs:
       - name: Run fuzz tests (incremental)
         if: steps.changed.outputs.files != '' && steps.changed.outputs.files != 'FULL'
         run: |
-          MODULES=$(echo "${{ steps.changed.outputs.files }}" | tr ' ' '\n' | cut -d/ -f1 | sort -u | tr '\n' ' ')
-          for mod in $MODULES; do
-            # Check both flat and nested locations for fuzz tests
-            if [ -f "${mod}/tests/test_fuzz.py" ]; then
-              echo "Running fuzz tests for ${mod}..."
-              uv run python "${mod}/tests/test_fuzz.py" -runs=10000
-            fi
-            if [ -d "${mod}/tests" ]; then
-              FOUND=$(find "${mod}/tests" -name "test_fuzz.py" -type f)
-              for f in $FOUND; do
-                if [ "$f" != "${mod}/tests/test_fuzz.py" ]; then
-                  echo "Running fuzz tests for ${f}..."
-                  uv run python "$f" -runs=10000
-                fi
-              done
-            fi
+          FOUND=$(find tests/fuzz -name "test_fuzz*.py" -type f)
+          for f in $FOUND; do
+            echo "Running fuzz tests: ${f}..."
+            uv run python "$f" -runs=100000
           done
 
       - name: Run full fuzz tests (main push)
         if: steps.changed.outputs.files == 'FULL'
         run: |
-          uv run python etl/tests/test_fuzz.py -runs=10000
-          uv run python upload/tests/test_fuzz.py -runs=10000
-          uv run python extract/tests/downloaders/test_fuzz.py -runs=10000
+          FOUND=$(find tests/fuzz -name "test_fuzz*.py" -type f)
+          for f in $FOUND; do
+            echo "Running fuzz tests: ${f}..."
+            uv run python "$f" -runs=1000000
+          done
 
   mutation:
     runs-on: ubuntu-latest
@@ -147,8 +128,8 @@ jobs:
               BASE="origin/main"
             fi
             FILES=$(git diff --name-only "$BASE"..HEAD \
-              | grep -E '^(extract|upload|etl)/.*\.py$' \
-              | grep -v '/tests/' \
+              | grep -E '^extract/.*\.py$' \
+              | grep -v '^tests/' \
               | tr '\n' ' ')
             if [ -z "$FILES" ]; then
               echo "No Python source files changed — skipping mutation"
@@ -190,8 +171,8 @@ jobs:
               BASE="origin/main"
             fi
             FILES=$(git diff --name-only "$BASE"..HEAD \
-              | grep -E '^(extract|upload|etl)/.*\.py$' \
-              | grep -v '/tests/' \
+              | grep -E '^extract/.*\.py$' \
+              | grep -v '^tests/' \
               | tr '\n' ' ')
             echo "files=$FILES" >> $GITHUB_OUTPUT
           fi
@@ -227,26 +208,16 @@ jobs:
               BASE="origin/main"
             fi
             FILES=$(git diff --name-only "$BASE"..HEAD \
-              | grep -E '^(extract|upload|etl)/.*\.py$' \
-              | grep -v '/tests/' \
+              | grep -E '^extract/.*\.py$' \
+              | grep -v '^tests/' \
               | tr '\n' ' ')
             echo "files=$FILES" >> $GITHUB_OUTPUT
           fi
 
       - name: Run e2e tests (incremental)
         if: steps.changed.outputs.files != '' && steps.changed.outputs.files != 'FULL'
-        run: |
-          MODULES=$(echo "${{ steps.changed.outputs.files }}" | tr ' ' '\n' | cut -d/ -f1 | sort -u | tr '\n' ' ')
-          E2E_DIRS=""
-          for mod in $MODULES; do
-            if [ -d "${mod}/tests" ]; then
-              E2E_DIRS+=" ${mod}/tests/"
-            fi
-          done
-          if [ -n "$E2E_DIRS" ]; then
-            uv run pytest -v $E2E_DIRS -k "e2e"
-          fi
+        run: uv run pytest -v tests/e2e/
 
       - name: Run full e2e tests (main push)
         if: steps.changed.outputs.files == 'FULL'
-        run: uv run pytest -v etl/tests/ extract/tests/ upload/tests/ -k "e2e"
+        run: uv run pytest -v tests/e2e/

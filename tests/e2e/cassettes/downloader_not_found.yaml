@@ -1,0 +1,15 @@
+interactions:
+- request:
+    body: null
+    headers: {}
+    method: HEAD
+    uri: https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2015-01.parquet
+  response:
+    body:
+      string: !!binary ""
+    headers: {}
+    status:
+      code: 404
+      message: Not Found
+    url: https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2015-01.parquet
+version: 1
