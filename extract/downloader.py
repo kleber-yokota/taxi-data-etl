@@ -179,7 +179,7 @@ def execute_download_with_retry(
                 logger.warning(f"Checksum verification failed for {filename}")
             return  # Success
 
-        except (httpx.HTTPError, ValueError, IOError) as e:
+        except (httpx.HTTPError, ValueError, IOError, NetworkError) as e:
             logger.warning(f"Attempt {attempt} failed for {filename}: {e}")
             if temp_path.exists():
                 temp_path.unlink()
