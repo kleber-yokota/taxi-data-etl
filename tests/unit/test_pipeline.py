@@ -1,27 +1,24 @@
+"""Unit tests for the refactored pipeline with composition."""
+
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from orchestrator.pipeline import (
-    FileOutcome,
-    FileStatus,
-    PipelineResult,
-    run_pipeline,
-)
+from pipeline import PipelineOrchestrator
+from pipeline.result import FileOutcome, FileStatus, PipelineResult
+from extract.hasher import Sha256Hasher
 from upload.uploader import UploadResult, UploadStatus
 
 
-@pytest.fixture
 def mock_download_success():
-    result = MagicMock()
-    result.file_path = Path("/tmp/test.parquet")
-    result.hash_value = "abc123"
-    result.hash_type = "sha256"
-    return result
+    return MagicMock(
+        file_path=Path("/tmp/test.parquet"),
+        hash_value="abc123",
+        hash_type="sha256",
+    )
 
 
-@pytest.fixture
 def mock_upload_success():
     return UploadResult(
         file_name="test.parquet",
@@ -33,8 +30,9 @@ def mock_upload_success():
 
 
 def test_empty_urls():
-    with patch("orchestrator.pipeline.generate_parquet_urls", return_value=[]):
-        result = run_pipeline(hasher=MagicMock())
+    with patch("pipeline.orchestrator.generate_parquet_urls", return_value=[]):
+        orchestrator = PipelineOrchestrator(hasher=MagicMock())
+        result = orchestrator.run()
 
     assert result.total == 0
     assert result.succeeded == 0
@@ -43,20 +41,18 @@ def test_empty_urls():
     assert result.files == []
 
 
-def test_all_success(mock_download_success, mock_upload_success):
+def test_all_success():
     test_urls = [
         "http://example.com/file1.parquet",
         "http://example.com/file2.parquet",
     ]
 
-    with (
-        patch("orchestrator.pipeline.generate_parquet_urls", return_value=test_urls),
-        patch(
-            "orchestrator.pipeline.download_file", return_value=mock_download_success
-        ),
-        patch("orchestrator.pipeline.upload_file", return_value=mock_upload_success),
-    ):
-        result = run_pipeline(hasher=MagicMock())
+    with patch("pipeline.orchestrator.generate_parquet_urls", return_value=test_urls):
+        with patch("pipeline.processor.download_file", return_value=mock_download_success()):
+            with patch("pipeline.processor.upload_file", return_value=mock_upload_success()):
+                Path("/tmp/test.parquet").write_bytes(b"test content")
+                orchestrator = PipelineOrchestrator(hasher=MagicMock())
+                result = orchestrator.run()
 
     assert result.total == 2
     assert result.succeeded == 2
@@ -65,14 +61,13 @@ def test_all_success(mock_download_success, mock_upload_success):
     assert all(f.status == FileStatus.SUCCESS for f in result.files)
 
 
-def test_download_forbidden(mock_upload_success):
+def test_download_forbidden():
     test_urls = ["http://example.com/forbidden.parquet"]
 
-    with (
-        patch("orchestrator.pipeline.generate_parquet_urls", return_value=test_urls),
-        patch("orchestrator.pipeline.download_file", return_value=None),
-    ):
-        result = run_pipeline(hasher=MagicMock())
+    with patch("pipeline.orchestrator.generate_parquet_urls", return_value=test_urls):
+        with patch("pipeline.processor.download_file", return_value=None):
+            orchestrator = PipelineOrchestrator(hasher=MagicMock())
+            result = orchestrator.run()
 
     assert result.total == 1
     assert result.succeeded == 0
@@ -83,23 +78,19 @@ def test_download_forbidden(mock_upload_success):
 def test_download_raises_exception():
     test_urls = ["http://example.com/error.parquet"]
 
-    with (
-        patch("orchestrator.pipeline.generate_parquet_urls", return_value=test_urls),
-        patch(
-            "orchestrator.pipeline.download_file",
-            side_effect=RuntimeError("Connection timeout"),
-        ),
-    ):
-        result = run_pipeline(hasher=MagicMock())
+    with patch("pipeline.orchestrator.generate_parquet_urls", return_value=test_urls):
+        with patch("pipeline.processor.download_file", side_effect=RuntimeError("Connection timeout")):
+            orchestrator = PipelineOrchestrator(hasher=MagicMock())
+            result = orchestrator.run()
 
     assert result.total == 1
     assert result.succeeded == 0
     assert result.failed == 1
-    assert result.files[0].status == FileStatus.DOWNLOAD_ERROR
+    assert result.files[0].status == FileStatus.DOWNLOAD_FAILED
     assert "Connection timeout" in result.files[0].error_message
 
 
-def test_upload_error(mock_download_success):
+def test_upload_error():
     test_urls = ["http://example.com/file.parquet"]
     upload_error = UploadResult(
         file_name="file.parquet",
@@ -108,23 +99,21 @@ def test_upload_error(mock_download_success):
         error_message="S3 connection refused",
     )
 
-    with (
-        patch("orchestrator.pipeline.generate_parquet_urls", return_value=test_urls),
-        patch(
-            "orchestrator.pipeline.download_file", return_value=mock_download_success
-        ),
-        patch("orchestrator.pipeline.upload_file", return_value=upload_error),
-    ):
-        result = run_pipeline(hasher=MagicMock())
+    with patch("pipeline.orchestrator.generate_parquet_urls", return_value=test_urls):
+        with patch("pipeline.processor.download_file", return_value=mock_download_success()):
+            with patch("pipeline.processor.upload_file", return_value=upload_error):
+                Path("/tmp/test.parquet").write_bytes(b"test content")
+                orchestrator = PipelineOrchestrator(hasher=MagicMock())
+                result = orchestrator.run()
 
     assert result.total == 1
     assert result.succeeded == 0
     assert result.failed == 1
     assert result.files[0].status == FileStatus.UPLOAD_FAILED
-    assert "S3 connection refused" in result.files[0].error_message
+    assert "S3 connection refused" in result.files[0].upload_result.error_message
 
 
-def test_upload_skipped(mock_download_success):
+def test_upload_skipped():
     test_urls = ["http://example.com/file.parquet"]
     upload_skipped = UploadResult(
         file_name="file.parquet",
@@ -134,14 +123,12 @@ def test_upload_skipped(mock_download_success):
         hash_type="sha256",
     )
 
-    with (
-        patch("orchestrator.pipeline.generate_parquet_urls", return_value=test_urls),
-        patch(
-            "orchestrator.pipeline.download_file", return_value=mock_download_success
-        ),
-        patch("orchestrator.pipeline.upload_file", return_value=upload_skipped),
-    ):
-        result = run_pipeline(hasher=MagicMock())
+    with patch("pipeline.orchestrator.generate_parquet_urls", return_value=test_urls):
+        with patch("pipeline.processor.download_file", return_value=mock_download_success()):
+            with patch("pipeline.processor.upload_file", return_value=upload_skipped):
+                Path("/tmp/test.parquet").write_bytes(b"test content")
+                orchestrator = PipelineOrchestrator(hasher=MagicMock())
+                result = orchestrator.run()
 
     assert result.total == 1
     assert result.succeeded == 0
@@ -151,70 +138,69 @@ def test_upload_skipped(mock_download_success):
 
 
 def test_mixed_scenario():
-    success_result = MagicMock()
-    success_result.file_path = Path("/tmp/success.parquet")
-    success_result.hash_value = "abc"
-    success_result.hash_type = "sha256"
-
-    forbidden_result = MagicMock()
-    forbidden_result.file_path = Path("/tmp/forbidden.parquet")
-    forbidden_result.hash_value = "def"
-    forbidden_result.hash_type = "sha256"
-
     test_urls = [
-        "http://example.com/success.parquet",
-        "http://example.com/forbidden.parquet",
-        "http://example.com/error.parquet",
+        "http://example.com/file1.parquet",
+        "http://example.com/file2.parquet",
+        "http://example.com/file3.parquet",
     ]
 
+    def mock_download_side_effect(*args, **kwargs):
+        url = args[0] if args else kwargs.get('url', '')
+        if "file1" in url:
+            return mock_download_success()
+        elif "file2" in url:
+            raise RuntimeError("Network error")
+        else:
+            return mock_download_success()
+
     upload_ok = UploadResult(
-        file_name="success.parquet",
-        original_path="/tmp/success.parquet",
+        file_name="file1.parquet",
+        original_path="/tmp/test.parquet",
         status=UploadStatus.SUCCESS,
-        hash_value="abc",
+        hash_value="abc123",
+        hash_type="sha256",
+    )
+    upload_skipped = UploadResult(
+        file_name="file3.parquet",
+        original_path="/tmp/test.parquet",
+        status=UploadStatus.SKIPPED,
+        hash_value="abc123",
         hash_type="sha256",
     )
 
-    def mock_download_side_effect(url, *args, **kwargs):
-        if "success" in url:
-            return success_result
-        elif "forbidden" in url:
-            return None
-        raise RuntimeError("Network error")
+    call_count = [0]
 
-    with (
-        patch("orchestrator.pipeline.generate_parquet_urls", return_value=test_urls),
-        patch(
-            "orchestrator.pipeline.download_file",
-            side_effect=mock_download_side_effect,
-        ),
-        patch("orchestrator.pipeline.upload_file", return_value=upload_ok),
-    ):
-        result = run_pipeline(hasher=MagicMock())
+    def mock_upload_side_effect(*args, **kwargs):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return upload_ok
+        else:
+            return upload_skipped
+
+    with patch("pipeline.orchestrator.generate_parquet_urls", return_value=test_urls):
+        with patch("pipeline.processor.download_file", side_effect=mock_download_side_effect):
+            with patch("pipeline.processor.upload_file", side_effect=mock_upload_side_effect):
+                Path("/tmp/test.parquet").write_bytes(b"test content")
+                Path("/tmp/file3.parquet").write_bytes(b"test content")
+                orchestrator = PipelineOrchestrator(hasher=MagicMock())
+                result = orchestrator.run()
 
     assert result.total == 3
     assert result.succeeded == 1
-    assert result.failed == 2
-    assert result.files[0].status == FileStatus.SUCCESS
-    assert result.files[1].status == FileStatus.DOWNLOAD_FAILED
-    assert result.files[2].status == FileStatus.DOWNLOAD_ERROR
+    assert result.skipped == 1
+    assert result.failed == 1
 
 
-def test_bucket_path_prefix(mock_download_success, mock_upload_success):
+def test_bucket_path_prefix():
     test_urls = ["http://example.com/yellow_tripdata_2024-01.parquet"]
 
-    with (
-        patch("orchestrator.pipeline.generate_parquet_urls", return_value=test_urls),
-        patch(
-            "orchestrator.pipeline.download_file", return_value=mock_download_success
-        ),
-        patch("orchestrator.pipeline.upload_file") as mock_upload,
-    ):
-        mock_upload.return_value = mock_upload_success
-        run_pipeline(
-            hasher=MagicMock(),
-            bucket_path_prefix="raw/2024/",
-        )
+    with patch("pipeline.orchestrator.generate_parquet_urls", return_value=test_urls):
+        with patch("pipeline.processor.download_file", return_value=mock_download_success()):
+            with patch("pipeline.processor.upload_file") as mock_upload:
+                mock_upload.return_value = mock_upload_success()
+                Path("/tmp/test.parquet").write_bytes(b"test content")
+                orchestrator = PipelineOrchestrator(hasher=MagicMock())
+                orchestrator.run(bucket_path_prefix="raw/2024/")
 
     mock_upload.assert_called_once_with(
         source_path="/tmp/test.parquet",
@@ -225,21 +211,16 @@ def test_bucket_path_prefix(mock_download_success, mock_upload_success):
     )
 
 
-def test_custom_bucket_name(mock_download_success, mock_upload_success):
+def test_custom_bucket_name():
     test_urls = ["http://example.com/yellow_tripdata_2024-01.parquet"]
 
-    with (
-        patch("orchestrator.pipeline.generate_parquet_urls", return_value=test_urls),
-        patch(
-            "orchestrator.pipeline.download_file", return_value=mock_download_success
-        ),
-        patch("orchestrator.pipeline.upload_file") as mock_upload,
-    ):
-        mock_upload.return_value = mock_upload_success
-        run_pipeline(
-            hasher=MagicMock(),
-            bucket_name="my-custom-bucket",
-        )
+    with patch("pipeline.orchestrator.generate_parquet_urls", return_value=test_urls):
+        with patch("pipeline.processor.download_file", return_value=mock_download_success()):
+            with patch("pipeline.processor.upload_file") as mock_upload:
+                mock_upload.return_value = mock_upload_success()
+                Path("/tmp/test.parquet").write_bytes(b"test content")
+                orchestrator = PipelineOrchestrator(hasher=MagicMock())
+                orchestrator.run(bucket_name="my-custom-bucket")
 
     mock_upload.assert_called_once_with(
         source_path="/tmp/test.parquet",

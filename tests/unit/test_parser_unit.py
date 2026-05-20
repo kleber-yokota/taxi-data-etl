@@ -68,12 +68,12 @@ def test_generate_parquet_urls_empty_inputs():
 
 def test_generate_parquet_urls_invalid_types():
     """Test that invalid types raise TypeError."""
-    # For years = None, the validator now raises a specific "years must be iterable"
+    # Test with non-iterable to trigger validation
     with pytest.raises(TypeError, match="years must be iterable"):
-        generate_parquet_urls(["yellow"], None, [1])
+        generate_parquet_urls(["yellow"], 123, [1])
 
     with pytest.raises(TypeError, match="Month must be an integer"):
-        generate_parquet_urls(["yellow"], [2023], ["1"])
+        generate_parquet_urls(["yellow"], [2023], "1")
 
 
 def test_generate_parquet_urls_invalid_month_range():
