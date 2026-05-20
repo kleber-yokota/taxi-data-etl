@@ -8,7 +8,9 @@
 
 ## 🎯 O que eu construí
 
-Projeto de **ETL de dados de taxi da NYC** que utiliza **opencode** com **Qwen 3.5 9B** para acelerar o desenvolvimento de pipelines de dados em até **10x**.
+Projeto de **ETL de dados de taxi da NYC** que utiliza **opencode** com **Qwen 3.5 9B** para acelerar o desenvolvimento de pipelines de dados.
+
+**Objetivo**: Criar **agents especializados** que extraiam o máximo valor de LLMs para automatizar e otimizar processos de engenharia de dados.
 
 ### 🧠 Minha abordagem
 
@@ -183,6 +185,7 @@ Implementei **fuzzing** para encontrar bugs de forma automatizada:
 - Como usar opencode para acelerar o desenvolvimento
 - Engenharia de prompts para resultados de qualidade
 - Integração de LLMs no fluxo de trabalho de engenharia
+- **Criação de agents** para extrair máximo valor de modelos de linguagem
 
 ### 3. **Best Practices**
 - Code review automático com IA
@@ -202,15 +205,15 @@ Este projeto demonstra minha capacidade de:
 
 ### 📧 Entre em contato
 
-- **Email**: [seu-email@exemplo.com](mailto:seu-email@exemplo.com)
-- **LinkedIn**: [linkedin.com/in/seu-perfil](https://linkedin.com/in/seu-perfil)
+- **LinkedIn**: [linkedin.com/in/kleber-yokota/](https://www.linkedin.com/in/kleber-yokota/)
 - **GitHub**: [github.com/seu-usuario](https://github.com/seu-usuario)
-- **Portfolio**: [seu-portfolio.com](https://seu-portfolio.com)
 
 ---
 
 ## 🚀 Próximos Passos
 
+- [ ] Criar **agents especializados** para extrair máximo valor dos LLMs
+- [ ] Explorar **automação inteligente** de pipelines de dados
 - [ ] Implementar **data mesh** para escalabilidade
 - [ ] Adicionar **ML pipelines** para análise preditiva
 - [ ] Criar **dashboard** de visualização de dados
@@ -223,3 +226,5 @@ Este projeto demonstra minha capacidade de:
 ---
 
 **Feito com ❤️ e 🤖 usando opencode + Qwen 3.5 9B**
+
+*Objetivo: Criar agents inteligentes para extrair o máximo valor de LLMs em projetos de engenharia de dados*
