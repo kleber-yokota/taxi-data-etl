@@ -1,7 +1,7 @@
 import logging
 from typing import List
 
-from pipeline.result import FileOutcome, PipelineResult
+from pipeline.result import FileOutcome, FileStatus, PipelineResult
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +22,9 @@ class ResultAggregator:
             outcome: The FileOutcome to add.
         """
         self.outcomes.append(outcome)
-        if outcome.status == "success":
+        if outcome.status == FileStatus.SUCCESS:
             self.succeeded += 1
-        elif outcome.status == "skipped":
+        elif outcome.status == FileStatus.SKIPPED:
             self.skipped += 1
         else:
             self.failed += 1

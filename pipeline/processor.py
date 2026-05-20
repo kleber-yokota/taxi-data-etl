@@ -36,13 +36,18 @@ class FileProcessor:
         filename = url.split("/")[-1]
         logger.info(f"Processing {filename}")
 
-        download_result = self.attempt_download(url)
+        try:
+            download_result = self._download(url)
+        except Exception as e:
+            logger.error(f"Download failed for {filename}: {e}")
+            return _classify_file(url, error_message=str(e))
+
         if download_result is None:
             logger.warning(f"Skipping {filename}: access denied or not found")
             return _classify_file(url, error_message="forbidden or not found")
 
         bucket_path = f"{bucket_path_prefix}{filename}"
-        upload_result = self.attempt_upload(
+        upload_result = self._upload(
             source_path=str(download_result.file_path),
             bucket_path=bucket_path,
             file_hash=download_result.hash_value,
@@ -56,10 +61,8 @@ class FileProcessor:
             upload_result=upload_result,
         )
 
-    def attempt_download(
-        self, url: str
-    ) -> Optional[DownloadResult]:
-        """Attempt to download a file.
+    def _download(self, url: str) -> Optional[DownloadResult]:
+        """Download a file from URL.
 
         Args:
             url: The URL of the file to download.
@@ -73,7 +76,7 @@ class FileProcessor:
             logger.error(f"Download failed for {url}: {e}")
             raise
 
-    def attempt_upload(
+    def _upload(
         self,
         source_path: str,
         bucket_path: str,
@@ -81,7 +84,7 @@ class FileProcessor:
         hash_type: str,
         bucket_name: str,
     ) -> UploadResult:
-        """Attempt to upload a file.
+        """Upload a file to S3.
 
         Args:
             source_path: Local path to the file.

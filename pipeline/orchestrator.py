@@ -21,12 +21,6 @@ class PipelineOrchestrator:
         bucket_name: str = "raw-data",
         bucket_path_prefix: str = "",
     ):
-        from extract.hasher import Sha256Hasher
-        from extract.downloader import download_file
-        from upload.uploader import upload_file
-        from pipeline.processor import FileProcessor
-        from pipeline.aggregator import ResultAggregator
-        
         self.processor = FileProcessor(download_dir, hasher)
         self.aggregator = ResultAggregator()
         self.bucket_name = bucket_name
