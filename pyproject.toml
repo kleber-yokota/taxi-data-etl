@@ -17,8 +17,8 @@ include = ["extract*", "upload*", "orchestrator*", "pipeline*"]
 exclude = ["mutants*", "tests*", ".venv*"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests/unit"]
-norecursedirs = ["mutants", "tests/fuzz", "tests/e2e", ".venv", "__pycache__"]
+testpaths = ["tests/unit", "tests/e2e", "tests/fuzz"]
+norecursedirs = ["mutants", ".venv", "__pycache__", "build", "dist"]
 
 [tool.mutmut]
 paths_to_mutate = ["extract", "upload"]

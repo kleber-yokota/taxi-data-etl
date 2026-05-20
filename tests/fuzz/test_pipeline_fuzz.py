@@ -1,5 +1,5 @@
 """
-Fuzz test for pipeline.orchestrator.PipelineOrchestrator.run
+Fuzz test for orchestrator.orchestrator.PipelineOrchestrator.run
 
 Based on the actual implementation of orchestrator.py
 """
@@ -8,7 +8,7 @@ import atheris
 from pathlib import Path
 
 with atheris.instrument_imports():
-    from pipeline import PipelineOrchestrator
+    from orchestrator import PipelineOrchestrator
     from extract.hasher import Sha256Hasher
 
 

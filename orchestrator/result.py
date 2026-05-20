@@ -48,16 +48,14 @@ def _classify_file(
     upload_result: Optional[UploadResult] = None,
     error_message: str = "",
 ) -> FileOutcome:
-    if download_result is None:
+    if download_result is None or upload_result is None:
         status = FileStatus.DOWNLOAD_FAILED
-    elif upload_result is not None and upload_result.status is UploadStatus.ERROR:
+    elif upload_result.status is UploadStatus.ERROR:
         status = FileStatus.UPLOAD_FAILED
-    elif upload_result is not None and upload_result.status is UploadStatus.SKIPPED:
+    elif upload_result.status is UploadStatus.SKIPPED:
         status = FileStatus.SKIPPED
-    elif upload_result is not None:
-        status = FileStatus.SUCCESS
     else:
-        status = FileStatus.DOWNLOAD_FAILED
+        status = FileStatus.SUCCESS
     return FileOutcome(
         url=url,
         status=status,

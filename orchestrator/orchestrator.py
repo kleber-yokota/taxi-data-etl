@@ -4,9 +4,9 @@ from typing import Iterable, Optional
 
 from extract.hasher import Hasher, Sha256Hasher
 from extract.parser import generate_parquet_urls
-from pipeline.aggregator import ResultAggregator
-from pipeline.processor import FileProcessor
-from pipeline.result import FileOutcome, PipelineResult
+from orchestrator.aggregator import ResultAggregator
+from orchestrator.processor import FileProcessor
+from orchestrator.result import FileOutcome, PipelineResult, FileStatus
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,6 @@ class PipelineOrchestrator:
         Returns:
             FileOutcome with DOWNLOAD_ERROR status.
         """
-        from pipeline.result import FileStatus
 
         return FileOutcome(
             url=url,

@@ -1,7 +1,7 @@
 import logging
 from typing import List
 
-from pipeline.result import FileOutcome, FileStatus, PipelineResult
+from orchestrator.result import FileOutcome, FileStatus, PipelineResult
 
 logger = logging.getLogger(__name__)
 

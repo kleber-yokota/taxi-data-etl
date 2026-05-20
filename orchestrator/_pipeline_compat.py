@@ -1,5 +1,3 @@
-"""Orchestrator module for processing NYC taxi data files using composition."""
-
 from orchestrator.orchestrator import PipelineOrchestrator
 from orchestrator.processor import FileProcessor
 from orchestrator.aggregator import ResultAggregator

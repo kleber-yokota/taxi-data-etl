@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pipeline import PipelineOrchestrator, FileProcessor, ResultAggregator
-from pipeline.result import FileOutcome, FileStatus, PipelineResult
+from orchestrator import PipelineOrchestrator, FileProcessor, ResultAggregator
+from orchestrator.result import FileOutcome, FileStatus, PipelineResult
 from extract.hasher import Sha256Hasher
 from upload.uploader import UploadResult, UploadStatus
 
@@ -182,7 +182,7 @@ def test_orchestrator_empty_urls():
         bucket_path_prefix="",
     )
     
-    with patch("pipeline.orchestrator.generate_parquet_urls", return_value=[]):
+    with patch("orchestrator.orchestrator.generate_parquet_urls", return_value=[]):
         result = orchestrator.run()
         
         assert result.total == 0
@@ -212,7 +212,7 @@ def test_orchestrator_pipeline_execution():
     )
     
     with patch.object(orchestrator.processor, 'process_file', return_value=mock_outcome):
-        with patch("pipeline.orchestrator.generate_parquet_urls", return_value=test_urls):
+        with patch("orchestrator.orchestrator.generate_parquet_urls", return_value=test_urls):
             result = orchestrator.run()
             
             assert result.total == 2

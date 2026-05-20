@@ -4,7 +4,7 @@ from typing import Optional
 
 from extract.downloader import DownloadResult, download_file
 from extract.hasher import Hasher
-from pipeline.result import FileOutcome, FileStatus, _classify_file
+from orchestrator.result import FileOutcome, FileStatus, _classify_file
 from upload.uploader import UploadResult, UploadStatus, upload_file
 
 logger = logging.getLogger(__name__)

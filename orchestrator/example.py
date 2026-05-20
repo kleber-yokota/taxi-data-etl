@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from pipeline import PipelineOrchestrator
-from pipeline.result import FileStatus
+from orchestrator.result import FileStatus
 from extract.hasher import Sha256Hasher
 
 
