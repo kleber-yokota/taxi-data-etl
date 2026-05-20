@@ -65,7 +65,7 @@ def test_file_processor_download_scenarios():
             bucket_name="test-bucket",
             bucket_path_prefix="",
         )
-        assert outcome.status == FileStatus.DOWNLOAD_FAILED
+        assert outcome.status == FileStatus.DOWNLOAD_ERROR
         assert "Connection timeout" in outcome.error_message
 
 

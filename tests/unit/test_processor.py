@@ -109,8 +109,8 @@ def test_processor_download_exception():
             bucket_path_prefix="",
         )
 
-    assert outcome.status == FileStatus.DOWNLOAD_FAILED
-    assert "Connection timeout" in outcome.error_message
+        assert outcome.status == FileStatus.DOWNLOAD_ERROR
+        assert "Connection timeout" in outcome.error_message
     assert outcome.upload_result is None
 
 

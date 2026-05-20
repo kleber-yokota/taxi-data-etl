@@ -40,7 +40,11 @@ class FileProcessor:
             download_result = self._download(url)
         except Exception as e:
             logger.error(f"Download failed for {filename}: {e}")
-            return _classify_file(url, error_message=str(e))
+            return FileOutcome(
+                url=url,
+                status=FileStatus.DOWNLOAD_ERROR,
+                error_message=str(e),
+            )
 
         if download_result is None:
             logger.warning(f"Skipping {filename}: access denied or not found")

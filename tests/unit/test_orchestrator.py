@@ -86,7 +86,7 @@ def test_download_raises_exception():
     assert result.total == 1
     assert result.succeeded == 0
     assert result.failed == 1
-    assert result.files[0].status == FileStatus.DOWNLOAD_FAILED
+    assert result.files[0].status == FileStatus.DOWNLOAD_ERROR
     assert "Connection timeout" in result.files[0].error_message
 
 
