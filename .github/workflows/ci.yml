@@ -35,8 +35,7 @@ jobs:
               BASE="origin/main"
             fi
             FILES=$(git diff --name-only "$BASE"..HEAD \
-              | grep -E '^extract/.*\.py$' \
-              | grep -v '^tests/' \
+              | grep -E '^(extract|upload|orchestrator)/.*\.py$' \
               | tr '\n' ' ')
             if [ -z "$FILES" ]; then
               echo "No Python source files changed — skipping"
@@ -79,8 +78,7 @@ jobs:
               BASE="origin/main"
             fi
             FILES=$(git diff --name-only "$BASE"..HEAD \
-              | grep -E '^extract/.*\.py$' \
-              | grep -v '^tests/' \
+              | grep -E '^(extract|upload|orchestrator)/.*\.py$' \
               | tr '\n' ' ')
             echo "files=$FILES" >> $GITHUB_OUTPUT
           fi
@@ -128,8 +126,7 @@ jobs:
               BASE="origin/main"
             fi
             FILES=$(git diff --name-only "$BASE"..HEAD \
-              | grep -E '^extract/.*\.py$' \
-              | grep -v '^tests/' \
+              | grep -E '^(extract|upload|orchestrator)/.*\.py$' \
               | tr '\n' ' ')
             if [ -z "$FILES" ]; then
               echo "No Python source files changed — skipping mutation"
@@ -171,8 +168,7 @@ jobs:
               BASE="origin/main"
             fi
             FILES=$(git diff --name-only "$BASE"..HEAD \
-              | grep -E '^extract/.*\.py$' \
-              | grep -v '^tests/' \
+              | grep -E '^(extract|upload|orchestrator)/.*\.py$' \
               | tr '\n' ' ')
             echo "files=$FILES" >> $GITHUB_OUTPUT
           fi
@@ -208,8 +204,7 @@ jobs:
               BASE="origin/main"
             fi
             FILES=$(git diff --name-only "$BASE"..HEAD \
-              | grep -E '^extract/.*\.py$' \
-              | grep -v '^tests/' \
+              | grep -E '^(extract|upload|orchestrator)/.*\.py$' \
               | tr '\n' ' ')
             echo "files=$FILES" >> $GITHUB_OUTPUT
           fi
