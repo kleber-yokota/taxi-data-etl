@@ -23,39 +23,6 @@ Utilizo **LLMs para acelerar o processo de engenharia de dados**:
 
 ---
 
-## 💼 Habilidades Demonstradas
-
-### Engenharia de Dados
-- ✅ **ETL Pipelines** - Extração, transformação e carregamento de dados
-- ✅ **AWS S3** - Armazenamento e processamento de dados em nuvem
-- ✅ **ClickHouse** - Banco de dados analítico de alta performance
-- ✅ **Data Quality** - Validação e tratamento de dados inconsistentes
-
-### Inteligência Artificial
-- ✅ **opencode CLI** - Assistência de codificação inteligente
-- ✅ **Qwen 3.5 9B** - Modelo de linguagem para geração de código
-- ✅ **Prompt Engineering** - Engenharia de prompts para resultados otimizados
-- ✅ **AI-Assisted Development** - Aceleração do ciclo de desenvolvimento
-
-### DevOps & Qualidade
-- ✅ **CI/CD** - Integração e deploy contínuo
-- ✅ **Testing** - Validação automática de pipelines
-- ✅ **Monitoring** - Observabilidade de dados em tempo real
-- ✅ **Documentation** - Documentação técnica automática
-
----
-
-## 📊 Resultados
-
-| Métrica | Antes | Com AI | Melhoria |
-|---------|-------|--------|----------|
-| Tempo de desenvolvimento | 4h | 30min | **83% mais rápido** |
-| Bugs em produção | 15/mês | 2/mês | **87% menos** |
-| Documentação | Manual | Automática | **100% mais rápido** |
-| Refatoração | 2h | 10min | **95% mais rápido** |
-
----
-
 ## 🛠️ Stack Tecnológica
 
 ```
@@ -94,100 +61,60 @@ taxi-data-etl/
 
 ## 🧪 Estratégia de Testes
 
-Implementei uma **estratégia de testes em camadas** que acelera o desenvolvimento enquanto mantém a qualidade:
+Implementei uma **estratégia de testes em camadas** para garantir qualidade:
 
-### 🎯 Por que tantos testes?
+### 🎯 Testes Unitários
+- Testam componentes individuais isoladamente
+- Feedback rápido durante o desenvolvimento
+- Cobertura de funções críticas
 
-Percebi durante o desenvolvimento que **testes abrangentes não são burocracia, são aceleradores**:
+### 🧪 Testes E2E (End-to-End)
+- Validação completa do fluxo do download ao upload
+- Testes com mocks de API (respx, vcrpy)
+- Verificação do processo completo
 
-| Tipo de Teste | Benefício | Impacto |
-|---------------|-----------|---------|
-| **Unitários** | Feedback imediato no development | +40% velocidade de debugging |
-| **E2E (End-to-End)** | Validação completa do fluxo | -60% bugs em produção |
-| **Mutação** | Garante cobertura real | +25% confiança nas mudanças |
-| **Fuzzing** | Encontra edge cases automáticos | Código mais robusto |
+### 🐛 Testes de Fuzzing
+- Envio de dados aleatórios e malformados
+- Encontra edge cases que testes manuais não descobrem
+- Usa hypothesis para geração de dados
 
-### 🔬 Testes de Mutação
+### 🧬 Testes de Mutação
+- Mutação testing com mutmut
+- Garante que testes detectam bugs reais
+- Identifica testes fracos que precisam ser melhorados
 
-Utilizei **mutação testing** para garantir que meus testes realmente validam o código:
+### 🔬 Análise de Qualidade
 
-- Introduzo **mudanças propositalmente** no código
-- Verifico se os testes **detectam as falhas**
-- Se não detectam = **teste fraco** que precisa ser melhorado
+Utilizei ferramentas para analisar o código:
 
-**Resultado**: Testes mais confiáveis que dão **segurança para refatorar** sem medo de quebrar funcionalidades.
+- **Radon**: Medição de complexidade ciclomática e cobertura
+- **Xenon**: Análise de qualidade de código
+- **Coverage.py**: Rastreamento de execução de código
+- **Mutmut**: Testes de mutação para validar testes
 
-### 📊 Análise de Qualidade
-
-Implementei análise automática para:
-
-- Detectar **código não utilizado** (dead code)
-- Identificar **dependências órfãs**
-- Encontrar **redundâncias**
-- Sugerir **melhorias de performance**
-
-Isso me permite **refatorar agressivamente** sabendo exatamente o que pode ser removido ou otimizado.
-
----
-
-## 📊 Resultados
-
-### 🚀 Aceleração do Processo
-
-Com a combinação de **opencode + Qwen 3.5 9B + testes automatizados**, o processo de desenvolvimento é significativamente acelerado:
-
-| Etapa | Sem IA | Com IA + Testes |
-|-------|--------|-----------------|
-| **Geração de código** | Manual, repetitivo | Automática, reutilizável |
-| **Validação** | Testes manuais | Testes automáticos |
-| **Debug** | Investigações longas | Feedback instantâneo |
-| **Refatoração** | Medo de quebrar | Refatoração segura |
-
-### 🧪 Testes de Fuzzing
-
-Implementei **fuzzing** para encontrar bugs de forma automatizada:
-
-- **O que é**: Envio dados aleatórios e malformados para o código
-- **Como ajuda**: Encontra edge cases que testes manuais não descobrem
-- **Resultado**: Código mais robusto que lida com inputs inesperados
-
-**Exemplo prático**:
-```python
-# O fuzzing encontrou casos que quebravam o pipeline
-- Strings vazias em campos obrigatórios
-- Números negativos em quantidades
-- Formatos de data inválidos
-- Valores null em campos esperados
-```
-
-### 🔍 Como isso gera melhor código:
-
-1. **Resiliência** - O código lida com inputs inesperados
-2. **Validação antecipada** - Erros são detectados antes de chegar em produção
-3. **Documentação implícita** - Os casos de fuzz mostram o que o código espera
-4. **Menos bugs em produção** - Edge cases são tratados antes de deploy
-5. **Confiança para deploy** - Se o fuzz não quebra, o código é estável
+Isso me permitiu:
+- Identificar áreas do código com baixa cobertura
+- Encontrar funções complexas que precisam de refatoração
+- Detectar código não utilizado (dead code)
+- Validar que os testes realmente cobrem o código
 
 ---
 
-## 🎓 O que eu aprendi
+## 🧪 Testes Implementados
 
-### 1. **Engenharia de Dados Moderna**
-- Como construir pipelines escaláveis e confiáveis
-- Tratamento de dados inconsistentes e missing values
-- Otimização de performance com ClickHouse
-- Ingestão de dados com qualidade garantida
+### Unitários
+Testes unitários para:
+- `extract.downloader` - Download de dados
+- `extract.parser` - Parsing de arquivos CSV
+- `extract.hasher` - Hashing de dados
+- `upload.uploader` - Upload para S3
+- `orchestrator` - Orquestração do pipeline
 
-### 2. **LLM-Assisted Development**
-- Como usar opencode para acelerar o desenvolvimento
-- Engenharia de prompts para resultados de qualidade
-- Integração de LLMs no fluxo de trabalho de engenharia
-- **Criação de agents** para extrair máximo valor de modelos de linguagem
-
-### 3. **Best Practices**
-- Code review automático com IA
-- Testes automatizados para validação de dados
-- Monitoramento e alertas proativos
+### End-to-End (E2E)
+Testes completos do fluxo:
+- Download → Parse → Upload → Verificação
+- Validação de dados completos
+- Testes com VCR/respx para mocks de API
 
 ---
 
@@ -195,26 +122,16 @@ Implementei **fuzzing** para encontrar bugs de forma automatizada:
 
 Este projeto demonstra minha capacidade de:
 
-1. **Construir soluções de engenharia de dados** de ponta a ponta
-2. **Adotar novas tecnologias** (LLMs) para acelerar entregas
-3. **Documentar e comunicar** valor técnico de forma clara
-4. **Otimizar processos** para reduzir custos e tempo
+1. **Construir pipelines ETL** completos com qualidade garantida
+2. **Implementar estratégia de testes** abrangente (unitários, e2e, fuzzing, mutação)
+3. **Adotar novas tecnologias** (LLMs, opencode) para acelerar entregas
+4. **Documentar e comunicar** valor técnico de forma clara
+5. **Analisar qualidade de código** com ferramentas especializadas
 
 ### 📧 Entre em contato
 
 - **LinkedIn**: [linkedin.com/in/kleber-yokota/](https://www.linkedin.com/in/kleber-yokota/)
-- **GitHub**: [github.com/seu-usuario](https://github.com/seu-usuario)
-
----
-
-## 🚀 Próximos Passos
-
-- [ ] Criar **agents especializados** para extrair máximo valor dos LLMs
-- [ ] Implementar **processo de quality** para ingestão de dados no ClickHouse
-- [ ] Validação de esquema e qualidade dos dados antes do load
-- [ ] Tratamento de dados inconsistentes para ClickHouse
-- [ ] Otimização de queries para análise nos dados ingeridos
-- [ ] Monitoramento de qualidade contínua
+- **GitHub**: [github.com/kleber-yokota](https://github.com/kleber-yokota)
 
 ---
 
