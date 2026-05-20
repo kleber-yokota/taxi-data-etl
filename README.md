@@ -69,9 +69,8 @@ Utilizo **LLMs para acelerar o processo de engenharia de dados**:
 ┌─────────────────────────────────────────┐
 │         Data Engineering Stack           │
 │  • Python                               │
-│  • Apache Spark                         │
 │  • AWS S3                               │
-│  • SQL / Postgres                       │
+│  • ClickHouse                           │
 └─────────────────────────────────────────┘
 ```
 
@@ -213,11 +212,11 @@ Este projeto demonstra minha capacidade de:
 ## 🚀 Próximos Passos
 
 - [ ] Criar **agents especializados** para extrair máximo valor dos LLMs
-- [ ] Explorar **automação inteligente** de pipelines de dados
-- [ ] Implementar **data mesh** para escalabilidade
-- [ ] Adicionar **ML pipelines** para análise preditiva
-- [ ] Criar **dashboard** de visualização de dados
-- [ ] Implementar **real-time processing** com Kafka
+- [ ] Implementar **processo de quality** para ingestão de dados no ClickHouse
+- [ ] Validação de esquema e qualidade dos dados antes do load
+- [ ] Tratamento de dados inconsistentes para ClickHouse
+- [ ] Otimização de queries para análise nos dados ingeridos
+- [ ] Monitoramento de qualidade contínua
 
 ---
 
