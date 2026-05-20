@@ -136,24 +136,39 @@ Isso me permite **refatorar agressivamente** sabendo exatamente o que pode ser r
 
 ### 🚀 Aceleração do Processo
 
-Com a combinação de **opencode + Qwen 3.5 9B + testes automatizados**:
+Com a combinação de **opencode + Qwen 3.5 9B + testes automatizados**, o processo de desenvolvimento é significativamente acelerado:
 
-| Métrica | Antes | Com AI + Testes | Melhoria |
-|---------|-------|-----------------|----------|
-| **Tempo de desenvolvimento** | 4h | 30min | **83% mais rápido** |
-| **Bugs em produção** | 15/mês | 2/mês | **87% menos** |
-| **Tempo de debug** | 2h | 10min | **95% mais rápido** |
-| **Refatoração segura** | 2h (medo de quebrar) | 10min (testes garantem) | **95% mais rápido** |
-| **Tempo de review** | 1h | 10min | **90% mais rápido** |
-| **Confiança em deploy** | Baixa | Alta | **100% mais rápido** |
+| Etapa | Sem IA | Com IA + Testes |
+|-------|--------|-----------------|
+| **Geração de código** | Manual, repetitivo | Automática, reutilizável |
+| **Validação** | Testes manuais | Testes automáticos |
+| **Debug** | Investigações longas | Feedback instantâneo |
+| **Refatoração** | Medo de quebrar | Refatoração segura |
 
-### 💡 Como acelera o processo:
+### 🧪 Testes de Fuzzing
 
-1. **Feedback imediato** - Testes falham rápido, eu conserto rápido
-2. **Segurança para refatorar** - Testes E2E garantem que nada quebra
-3. **Menos medo de mudar** - Mutação testing mostra exatamente o que precisa ser testado
-4. **Auto-documentação** - Testes são exemplos de como usar o código
-5. **CI/CD automático** - Deploy com confiança total
+Implementei **fuzzing** para encontrar bugs de forma automatizada:
+
+- **O que é**: Envio dados aleatórios e malformados para o código
+- **Como ajuda**: Encontra edge cases que testes manuais não descobrem
+- **Resultado**: Código mais robusto que lida com inputs inesperados
+
+**Exemplo prático**:
+```python
+# O fuzzing encontrou casos que quebravam o pipeline
+- Strings vazias em campos obrigatórios
+- Números negativos em quantidades
+- Formatos de data inválidos
+- Valores null em campos esperados
+```
+
+### 🔍 Como isso gera melhor código:
+
+1. **Resiliência** - O código lida com inputs inesperados
+2. **Validação antecipada** - Erros são detectados antes de chegar em produção
+3. **Documentação implícita** - Os casos de fuzz mostram o que o código espera
+4. **Menos bugs em produção** - Edge cases são tratados antes de deploy
+5. **Confiança para deploy** - Se o fuzz não quebra, o código é estável
 
 ---
 
