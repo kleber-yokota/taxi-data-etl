@@ -1,192 +1,127 @@
-# 🚀 Taxi Data ETL Portfolio
+# taxi-data-etl
 
-## Transformando dados em insights com Inteligência Artificial
+ETL pipeline that ingests NYC TLC taxi data into ClickHouse for OLAP analytics — built with a local LLM as a core part of the development workflow.
 
-**Engenharia de Dados** | **LLM Operations** | **AI-Driven Development**
-
----
-
-## 🎯 O que eu construí
-
-Projeto de **ETL de dados de taxi da NYC** que utiliza **opencode** com **Qwen 3.5 9B** para acelerar o desenvolvimento de pipelines de dados.
-
-**Objetivo**: Criar **agents especializados** que extraiam o máximo valor de LLMs para automatizar e otimizar processos de engenharia de dados.
-
-### 🧠 Minha abordagem
-
-Utilizo **LLMs para acelerar o processo de engenharia de dados**:
-
-- **Geração automática** de código de pipelines ETL
-- **Refatoração inteligente** para otimização de performance
-- **Documentação automática** com exemplos práticos
-- **Debug assistido** por IA para redução de bugs
+**Stack**: Python · AWS S3 · ClickHouse · Docker · GitHub Actions · opencode + Qwen (local)
 
 ---
 
-## 🛠️ Stack Tecnológica
+## AI-assisted development
 
-```
-┌─────────────────────────────────────────┐
-│         LLM & AI Tools                   │
-│  • opencode CLI                         │
-│  • Qwen 3.5 9B                          │
-│  • Prompt Engineering                   │
-└─────────────────────────────────────────┘
-                    ↓
-┌─────────────────────────────────────────┐
-│         Data Engineering Stack           │
-│  • Python                               │
-│  • AWS S3                               │
-│  • ClickHouse                           │
-└─────────────────────────────────────────┘
-```
+This project was built using [opencode](https://opencode.ai) with a locally-run Qwen model as a coding assistant — no cloud API, no SaaS, just a local LLM integrated into the development workflow.
+
+The goal was to treat the LLM as a practical engineering tool, not a gimmick. Here's where it actually helped:
+
+**Boilerplate and scaffolding** — generating the initial structure for modules like `extract/`, `upload/`, and test files. The LLM produced first drafts quickly; I refined and validated each one.
+
+**Test case generation** — suggesting edge cases for fuzz and unit tests (malformed dates, empty fields, boundary values). Useful as a starting point, though several suggestions needed corrections or were discarded.
+
+**Refactoring assistance** — proposing cleaner implementations during code review loops, particularly for error handling and module boundaries.
+
+**Prompt engineering as a skill** — getting useful output consistently required well-structured prompts with explicit context about the codebase. Vague prompts produced generic code. This itself is a transferable skill: knowing how to direct an LLM toward a specific engineering goal.
+
+What the LLM did not replace: architectural decisions, debugging non-obvious failures, understanding why mutmut survivors indicated weak assertions, and deciding what to test in the first place. Those required engineering judgment.
+
+The workflow — LLM for speed, human review for correctness — is the pattern I'd apply in a team setting.
 
 ---
 
-## 📁 Estrutura do Projeto
+## What it does
+
+1. **Extract** — downloads NYC TLC trip record files (Parquet) from the public dataset
+2. **Upload** — stages raw files to AWS S3
+3. **Orchestrate** — coordinates the pipeline steps and manages execution flow
+4. **Load** — ingests data into ClickHouse for analytical queries
+
+---
+
+## Project structure
 
 ```
 taxi-data-etl/
-├── extract/              # Extração de dados da NYC
-├── upload/               # Upload para S3
-├── orchestrator/         # Orquestração do pipeline
-├── scripts/              # Scripts utilitários
-├── mutants/              # Testes de mutação
-├── tests/                # Testes abrangentes
-├── .github/              # CI/CD workflows
-├── .hypothesis/          # Fuzz testing
-├── .coverage             # Cobertura de testes
-└── pyproject.toml        # Configuração do projeto
+├── extract/          # Download and parse NYC TLC Parquet files
+├── upload/           # Upload raw data to S3
+├── orchestrator/     # Pipeline coordination
+├── scripts/          # Utility scripts
+├── tests/
+│   ├── unit/         # Unit tests
+│   ├── e2e/          # End-to-end tests using Testcontainers (MinIO)
+│   └── fuzz/         # Fuzz tests via Hypothesis and Atheris
+├── .github/workflows/ # CI/CD pipelines
+└── pyproject.toml
 ```
 
-## 🧪 Estratégia de Testes
+---
 
-Implementei uma **estratégia de testes em camadas** para garantir qualidade:
+## Testing strategy
 
-### 🎯 Testes Unitários
-- Testam componentes individuais isoladamente
-- Feedback rápido durante o desenvolvimento
-- Cobertura de funções críticas
+The project uses a layered approach to testing, where each layer serves a different purpose:
 
-### 🧪 Testes E2E (End-to-End)
-- Validação completa do fluxo do download ao upload
-- Testes com mocks de API (respx, vcrpy)
-- Verificação do processo completo
+**Unit tests** catch logic errors fast during development. Fast feedback loop.
 
-### 🐛 Testes de Fuzzing
-- Envio de dados aleatórios e malformados
-- Encontra edge cases que testes manuais não descobrem
-- Usa hypothesis para geração de dados
+**End-to-end tests** validate the full pipeline flow using real infrastructure locally via Testcontainers (MinIO as S3-compatible storage). If the E2E suite passes, the pipeline works end-to-end.
 
-### 🧬 Testes de Mutação
-- Mutação testing com mutmut
-- Garante que testes detectam bugs reais
-- Identifica testes fracos que precisam ser melhorados
+**Fuzz tests** (Hypothesis + Atheris) throw malformed and unexpected inputs at the pipeline to surface edge cases that manual tests miss — empty strings, null values, invalid date formats, negative numbers in numeric fields. Any input the real world might send.
 
-### 🔬 Análise de Qualidade
+**Mutation testing** (mutmut) verifies that the test suite actually catches bugs. It introduces small deliberate changes to the source code and checks whether at least one test fails. If tests pass with a mutation, that's a weak test worth fixing. Paths covered: `extract/` and `upload/`.
 
-Utilizei ferramentas para analisar o código:
-
-- **Radon**: Medição de complexidade ciclomática e cobertura
-- **Xenon**: Análise de qualidade de código
-- **Coverage.py**: Rastreamento de execução de código
-- **Mutmut**: Testes de mutação para validar testes
-
-Isso me permitiu:
-- Identificar áreas do código com baixa cobertura
-- Encontrar funções complexas que precisam de refatoração
-- Detectar código não utilizado (dead code)
-- Validar que os testes realmente cobrem o código
+**Code quality analysis** uses radon, xenon, and cohesion to track cyclomatic complexity and module cohesion, making it easier to spot code that is becoming hard to maintain before it becomes a problem.
 
 ---
 
-## 🧪 Testes Implementados
+## Key dependencies
 
-### Unitários
-Testes unitários para:
-- `extract.downloader` - Download de dados
-- `extract.parser` - Parsing de arquivos CSV
-- `extract.hasher` - Hashing de dados
-- `upload.uploader` - Upload para S3
-- `orchestrator` - Orquestração do pipeline
-
-### End-to-End (E2E)
-Testes completos do fluxo:
-- Download → Parse → Upload → Verificação
-- Validação de dados completos
-- Testes com VCR/respx para mocks de API
-
----
-
-## 🤝 Como me contratar
-
-Este projeto demonstra minha capacidade de:
-
-1. **Construir pipelines ETL** completos com qualidade garantida
-2. **Implementar estratégia de testes** abrangente (unitários, e2e, fuzzing, mutação)
-3. **Adotar novas tecnologias** (LLMs, opencode) para acelerar entregas
-4. **Documentar e comunicar** valor técnico de forma clara
-5. **Analisar qualidade de código** com ferramentas especializadas
-
-### 📧 Entre em contato
-
-- **LinkedIn**: [linkedin.com/in/kleber-yokota/](https://www.linkedin.com/in/kleber-yokota/)
-- **GitHub**: [github.com/kleber-yokota](https://github.com/kleber-yokota)
+| Dependency | Purpose |
+|---|---|
+| `httpx` | HTTP client for downloading TLC data |
+| `boto3` | AWS S3 integration |
+| `python-dotenv` | Environment config |
+| `pytest` + `pytest-cov` | Test runner and coverage |
+| `mutmut` | Mutation testing |
+| `hypothesis` | Property-based and fuzz testing |
+| `atheris` | Coverage-guided fuzzing |
+| `testcontainers[minio]` | Local S3-compatible storage for E2E tests |
+| `vcrpy` + `respx` | HTTP mocking for unit tests |
+| `radon` / `xenon` / `cohesion` | Code quality metrics |
 
 ---
 
-> "A inteligência artificial não substitui engenheiros de dados, mas engenheiros que usam IA substituem os que não usam."
+## Setup
+
+**Requirements**: Python 3.11+, Docker (for E2E tests), AWS credentials (or MinIO locally)
+
+```bash
+# Install dependencies
+uv sync --all-groups
+
+# Copy and fill in environment variables
+cp .env.example .env
+
+# Run unit tests
+pytest tests/unit
+
+# Run E2E tests (requires Docker)
+pytest tests/e2e
+
+# Run mutation tests
+mutmut run
+```
 
 ---
 
-## 💡 Lições Aprendidas
+## CI/CD
 
-### 🤖 LLMs como Aceleradores de Desenvolvimento
-
-Percebi que **LLMs são extremamente úteis** para:
-
-- **Escrever código** - Geração rápida de boilerplate, funções repetitivas
-- **Produzir código** - Implementação completa de features com prompts bem estruturados
-- **Análise de código** - Verificar se a ideia funciona antes de implementar
-
-### 🔄 Git como Checkpoint de Segurança
-
-Durante os **testes de mutação**, percebi que:
-
-- O **git é um ótimo checkpoint** quando o código está bom
-- Quando entramos nos testes de mutação, identificamos **o que precisa ser arrumado**
-- **Momento delicado**: quando perdemos o que fizemos durante refatoração
-- **Solução**: Commits frequentes antes de testes pesados salvam o dia
-
-### 🛡️ Testes E2E: Segurança para Refatorar
-
-Os **testes end-to-end** dão segurança porque:
-
-- Validam se o **processo completo funciona**
-- Cobrem **alguns caminhos críticos** do fluxo
-- Permitem refatorar com **confiança total**
-- Detectam regressões antes de chegar em produção
-
-### 🧪 Emulação e Qualidade de Código
-
-A **emulação (fuzzing)** agrega muito na qualidade:
-
-- Encontra **bugs que testes manuais não descobrem**
-- Valida **edge cases** inesperados
-- Garante que o código lida com **inputs malformados**
-- É essencial para **código de produção**
-
-### 🚀 CI/CD: Reflexão sobre Qualidade
-
-O **CI/CD precisa refletir sobre isso**:
-
-- Pipeline deve rodar **todos os testes** (unitários, E2E, fuzz, mutação)
-- **Feedback rápido** é crucial para manter qualidade
-- **Automatizar tudo** que pode ser automatizado
-- **Qualidade não é opcional** - é requisito para deploy
+GitHub Actions runs the test suite on every push. The pipeline covers unit tests and linting at minimum; E2E and mutation tests can be run manually or on schedule depending on resource cost.
 
 ---
 
-**Feito com ❤️ e 🤖 usando opencode + Qwen 3.5 9B**
+## Why ClickHouse
 
-*Objetivo: Criar agents inteligentes para extrair o máximo valor de LLMs em projetos de engenharia de dados*
+ClickHouse is an OLAP database designed for fast analytical queries on large datasets. The NYC TLC dataset spans hundreds of millions of rows across several years. ClickHouse handles column-oriented scans on this scale efficiently — queries that would be slow on a row-oriented database like Postgres run in seconds.
+
+---
+
+## Contact
+
+- LinkedIn: [linkedin.com/in/kleber-yokota](https://www.linkedin.com/in/kleber-yokota/)
+- GitHub: [github.com/kleber-yokota](https://github.com/kleber-yokota)
