@@ -35,8 +35,7 @@ jobs:
               BASE="origin/main"
             fi
             FILES=$(git diff --name-only "$BASE"..HEAD \
-              | grep -E '^extract/.*\.py$' \
-              | grep -v '^tests/' \
+              | grep -E '^(extract|upload|orchestrator)/.*\.py$' \
               | tr '\n' ' ')
             if [ -z "$FILES" ]; then
               echo "No Python source files changed — skipping"
@@ -79,8 +78,7 @@ jobs:
               BASE="origin/main"
             fi
             FILES=$(git diff --name-only "$BASE"..HEAD \
-              | grep -E '^extract/.*\.py$' \
-              | grep -v '^tests/' \
+              | grep -E '^(extract|upload|orchestrator)/.*\.py$' \
               | tr '\n' ' ')
             echo "files=$FILES" >> $GITHUB_OUTPUT
           fi
@@ -88,20 +86,12 @@ jobs:
       - name: Run fuzz tests (incremental)
         if: steps.changed.outputs.files != '' && steps.changed.outputs.files != 'FULL'
         run: |
-          FOUND=$(find tests/fuzz -name "test_fuzz*.py" -type f)
-          for f in $FOUND; do
-            echo "Running fuzz tests: ${f}..."
-            uv run python "$f" -runs=100000
-          done
+          uv run pytest -v tests/fuzz/ --forked
 
       - name: Run full fuzz tests (main push)
         if: steps.changed.outputs.files == 'FULL'
         run: |
-          FOUND=$(find tests/fuzz -name "test_fuzz*.py" -type f)
-          for f in $FOUND; do
-            echo "Running fuzz tests: ${f}..."
-            uv run python "$f" -runs=1000000
-          done
+          uv run pytest -v tests/fuzz/ --forked
 
   mutation:
     runs-on: ubuntu-latest
@@ -128,8 +118,7 @@ jobs:
               BASE="origin/main"
             fi
             FILES=$(git diff --name-only "$BASE"..HEAD \
-              | grep -E '^extract/.*\.py$' \
-              | grep -v '^tests/' \
+              | grep -E '^(extract|upload|orchestrator)/.*\.py$' \
               | tr '\n' ' ')
             if [ -z "$FILES" ]; then
               echo "No Python source files changed — skipping mutation"
@@ -171,8 +160,7 @@ jobs:
               BASE="origin/main"
             fi
             FILES=$(git diff --name-only "$BASE"..HEAD \
-              | grep -E '^extract/.*\.py$' \
-              | grep -v '^tests/' \
+              | grep -E '^(extract|upload|orchestrator)/.*\.py$' \
               | tr '\n' ' ')
             echo "files=$FILES" >> $GITHUB_OUTPUT
           fi
@@ -208,8 +196,7 @@ jobs:
               BASE="origin/main"
             fi
             FILES=$(git diff --name-only "$BASE"..HEAD \
-              | grep -E '^extract/.*\.py$' \
-              | grep -v '^tests/' \
+              | grep -E '^(extract|upload|orchestrator)/.*\.py$' \
               | tr '\n' ' ')
             echo "files=$FILES" >> $GITHUB_OUTPUT
           fi

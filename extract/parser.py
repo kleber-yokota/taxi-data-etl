@@ -127,7 +127,7 @@ def _validate_months(months: Iterable[int]) -> List[int]:
 
 def generate_parquet_urls(
     datasets: Iterable[str] = None,
-    years: Iterable[int] = range(2015, date.today().year + 1),
+    years: Iterable[int] = range(2009, date.today().year + 1),
     months: Iterable[int] = range(1, 13),
 ) -> List[str]:
     """
@@ -144,6 +144,10 @@ def generate_parquet_urls(
     """
     if datasets is None:
         datasets = VALID_DATASETS
+    if years is None:
+        years = range(2015, date.today().year + 1)
+    if months is None:
+        months = range(1, 13)
 
     v_datasets = _validate_datasets(datasets)
     v_years = _validate_years(years)

@@ -10,15 +10,16 @@ dependencies = [
     "httpx>=0.27.0",
     "boto3>=1.34",
     "python-dotenv>=1.0",
+    "pytest-forked>=1.6.0",
 ]
 
 [tool.setuptools.packages.find]
-include = ["extract*", "upload*", "orchestrator*"]
+include = ["extract*", "upload*", "orchestrator*", "pipeline*"]
 exclude = ["mutants*", "tests*", ".venv*"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests/unit"]
-norecursedirs = ["mutants", "tests/fuzz", "tests/e2e", ".venv", "__pycache__"]
+testpaths = ["tests/unit", "tests/e2e", "tests/fuzz"]
+norecursedirs = ["mutants", ".venv", "__pycache__", "build", "dist"]
 
 [tool.mutmut]
 paths_to_mutate = ["extract", "upload"]
@@ -33,7 +34,7 @@ dev = [
   "hypothesis>=6.0",
   "respx>=0.23.0",
   "vcrpy>=6.2.0",
-  "radon>=6.0",
+  "radon>=5.0",
   "xenon>=0.9",
   "cohesion>=1.2",
   "testcontainers[minio]>=4.6",

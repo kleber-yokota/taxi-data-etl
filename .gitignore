@@ -6,3 +6,4 @@ crash-*
 mutants
 *.egg-info
 .env
+.coverage

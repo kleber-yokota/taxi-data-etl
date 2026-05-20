@@ -11,7 +11,7 @@ from testcontainers.minio import MinioContainer
 
 from extract.hasher import Sha256Hasher
 from extract.parser import generate_parquet_urls
-from orchestrator.pipeline import FileStatus, run_pipeline
+from orchestrator import FileStatus, PipelineOrchestrator
 
 CASSETTE_DIR = Path("tests/e2e/cassettes")
 TEST_URL = generate_parquet_urls(datasets=["yellow"], years=[2015], months=[1])[0]
@@ -92,12 +92,12 @@ def test_pipeline_e2e_success(tmp_path, env_vars, setup_bucket):
     hasher = Sha256Hasher()
 
     with vcr.use_cassette("downloader_success.yaml"):
-        result = run_pipeline(
-            hasher=hasher,
+        orchestrator = PipelineOrchestrator(hasher=hasher, download_dir=download_dir, bucket_name=BUCKET_NAME)
+        result = orchestrator.run(
             datasets=["yellow"],
             years=[2015],
             months=[1],
-            download_dir=download_dir,
+
             bucket_name=BUCKET_NAME,
         )
 
@@ -142,12 +142,11 @@ def test_pipeline_e2e_skipped_on_duplicate(tmp_path, env_vars, setup_bucket):
     hasher = Sha256Hasher()
 
     with vcr.use_cassette("downloader_success.yaml"):
-        result1 = run_pipeline(
-            hasher=hasher,
+        orchestrator = PipelineOrchestrator(hasher=hasher, download_dir=download_dir, bucket_name=BUCKET_NAME)
+        result1 = orchestrator.run(
             datasets=["yellow"],
             years=[2015],
             months=[1],
-            download_dir=download_dir,
             bucket_name=BUCKET_NAME,
         )
 
@@ -162,12 +161,12 @@ def test_pipeline_e2e_not_found(tmp_path, env_vars, setup_bucket, caplog):
 
     with caplog.at_level(logging.WARNING):
         with vcr.use_cassette("downloader_not_found.yaml"):
-            result = run_pipeline(
-                hasher=hasher,
+            orchestrator = PipelineOrchestrator(hasher=hasher, download_dir=download_dir, bucket_name=BUCKET_NAME)
+            result = orchestrator.run(
                 datasets=["yellow"],
                 years=[2015],
                 months=[1],
-                download_dir=download_dir,
+
                 bucket_name=BUCKET_NAME,
             )
 
@@ -182,12 +181,12 @@ def test_pipeline_e2e_forbidden(tmp_path, env_vars, setup_bucket, caplog):
 
     with caplog.at_level(logging.WARNING):
         with vcr.use_cassette("downloader_forbidden.yaml"):
-            result = run_pipeline(
-                hasher=hasher,
+            orchestrator = PipelineOrchestrator(hasher=hasher, download_dir=download_dir, bucket_name=BUCKET_NAME)
+            result = orchestrator.run(
                 datasets=["yellow"],
                 years=[2015],
                 months=[1],
-                download_dir=download_dir,
+
                 bucket_name=BUCKET_NAME,
             )
 
