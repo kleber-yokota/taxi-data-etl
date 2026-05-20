@@ -225,6 +225,54 @@ Este projeto demonstra minha capacidade de:
 
 ---
 
+## 💡 Lições Aprendidas
+
+### 🤖 LLMs como Aceleradores de Desenvolvimento
+
+Percebi que **LLMs são extremamente úteis** para:
+
+- **Escrever código** - Geração rápida de boilerplate, funções repetitivas
+- **Produzir código** - Implementação completa de features com prompts bem estruturados
+- **Análise de código** - Verificar se a ideia funciona antes de implementar
+
+### 🔄 Git como Checkpoint de Segurança
+
+Durante os **testes de mutação**, percebi que:
+
+- O **git é um ótimo checkpoint** quando o código está bom
+- Quando entramos nos testes de mutação, identificamos **o que precisa ser arrumado**
+- **Momento delicado**: quando perdemos o que fizemos durante refatoração
+- **Solução**: Commits frequentes antes de testes pesados salvam o dia
+
+### 🛡️ Testes E2E: Segurança para Refatorar
+
+Os **testes end-to-end** dão segurança porque:
+
+- Validam se o **processo completo funciona**
+- Cobrem **alguns caminhos críticos** do fluxo
+- Permitem refatorar com **confiança total**
+- Detectam regressões antes de chegar em produção
+
+### 🧪 Emulação e Qualidade de Código
+
+A **emulação (fuzzing)** agrega muito na qualidade:
+
+- Encontra **bugs que testes manuais não descobrem**
+- Valida **edge cases** inesperados
+- Garante que o código lida com **inputs malformados**
+- É essencial para **código de produção**
+
+### 🚀 CI/CD: Reflexão sobre Qualidade
+
+O **CI/CD precisa refletir sobre isso**:
+
+- Pipeline deve rodar **todos os testes** (unitários, E2E, fuzz, mutação)
+- **Feedback rápido** é crucial para manter qualidade
+- **Automatizar tudo** que pode ser automatizado
+- **Qualidade não é opcional** - é requisito para deploy
+
+---
+
 **Feito com ❤️ e 🤖 usando opencode + Qwen 3.5 9B**
 
 *Objetivo: Criar agents inteligentes para extrair o máximo valor de LLMs em projetos de engenharia de dados*
