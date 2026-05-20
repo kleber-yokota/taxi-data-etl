@@ -28,7 +28,7 @@ Utilizo **LLMs para acelerar o processo de engenharia de dados**:
 ### Engenharia de Dados
 - ✅ **ETL Pipelines** - Extração, transformação e carregamento de dados
 - ✅ **AWS S3** - Armazenamento e processamento de dados em nuvem
-- ✅ **Apache Spark** - Processamento distribuído de grandes volumes
+- ✅ **ClickHouse** - Banco de dados analítico de alta performance
 - ✅ **Data Quality** - Validação e tratamento de dados inconsistentes
 
 ### Inteligência Artificial
@@ -80,19 +80,16 @@ Utilizo **LLMs para acelerar o processo de engenharia de dados**:
 
 ```
 taxi-data-etl/
-├── src/
-│   ├── extract/          # Extração de dados da NYC
-│   ├── transform/        # Transformação e limpeza
-│   ├── load/             # Carregamento em destino
-│   └── utils/            # Funções reutilizáveis
-├── config/               # Configurações do pipeline
-├── tests/                # Estratégia de testes abrangente
-│   ├── unit/             # Testes unitários
-│   ├── e2e/              # Testes end-to-end
-│   ├── mutation/         # Testes de mutação
-│   └── quality/          # Análise de qualidade de código
-├── scripts/              # Scripts de orquestração
-└── docs/                 # Documentação automática
+├── extract/              # Extração de dados da NYC
+├── upload/               # Upload para S3
+├── orchestrator/         # Orquestração do pipeline
+├── scripts/              # Scripts utilitários
+├── mutants/              # Testes de mutação
+├── tests/                # Testes abrangentes
+├── .github/              # CI/CD workflows
+├── .hypothesis/          # Fuzz testing
+├── .coverage             # Cobertura de testes
+└── pyproject.toml        # Configuração do projeto
 ```
 
 ## 🧪 Estratégia de Testes
@@ -108,7 +105,7 @@ Percebi durante o desenvolvimento que **testes abrangentes não são burocracia,
 | **Unitários** | Feedback imediato no development | +40% velocidade de debugging |
 | **E2E (End-to-End)** | Validação completa do fluxo | -60% bugs em produção |
 | **Mutação** | Garante cobertura real | +25% confiança nas mudanças |
-| **Qualidade** | Detecta código não utilizado | -30% dívida técnica |
+| **Fuzzing** | Encontra edge cases automáticos | Código mais robusto |
 
 ### 🔬 Testes de Mutação
 
@@ -178,7 +175,8 @@ Implementei **fuzzing** para encontrar bugs de forma automatizada:
 ### 1. **Engenharia de Dados Moderna**
 - Como construir pipelines escaláveis e confiáveis
 - Tratamento de dados inconsistentes e missing values
-- Otimização de performance e custos em nuvem
+- Otimização de performance com ClickHouse
+- Ingestão de dados com qualidade garantida
 
 ### 2. **LLM-Assisted Development**
 - Como usar opencode para acelerar o desenvolvimento
