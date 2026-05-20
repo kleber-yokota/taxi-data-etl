@@ -3,7 +3,7 @@
 import logging
 from pathlib import Path
 
-from pipeline import PipelineOrchestrator, FileProcessor, ResultAggregator
+from orchestrator import PipelineOrchestrator, FileProcessor, ResultAggregator
 from orchestrator.result import FileStatus
 from extract.hasher import Sha256Hasher
 
@@ -44,7 +44,7 @@ def main():
         logger.info(f"\n{'='*60}")
         logger.info("Falhas:")
         for outcome in result.files:
-            if outcome.status == FileStatus.DOWNLOAD_ERROR or outcome.status == FileStatus.UPLOAD_FAILED:
+            if outcome.status in (FileStatus.DOWNLOAD_FAILED, FileStatus.DOWNLOAD_ERROR, FileStatus.UPLOAD_FAILED):
                 logger.error(f"  {outcome.url}: {outcome.error_message}")
 
     return result
